@@ -39,6 +39,15 @@ impl<'input> Lexer<'input> {
         self.bump();
         match c {
             '+' => Some(Token::Operator(Operator::Plus)),
+            '-' => {
+                if let Some(c) = self.peek() {
+                    if c == '>' {
+                        self.bump();
+                        return Some(Token::Punctuation(Punctuation::ThinArrow));
+                    }
+                }
+                Some(Token::Operator(Operator::Minus))
+            }
             '=' => {
                 if let Some(c) = self.peek() {
                     if c == '=' {
@@ -52,8 +61,8 @@ impl<'input> Lexer<'input> {
             ')' => Some(Token::Punctuation(Punctuation::CloseParen)),
             '{' => Some(Token::Punctuation(Punctuation::OpenCurly)),
             '}' => Some(Token::Punctuation(Punctuation::CloseCurly)),
+            ',' => Some(Token::Punctuation(Punctuation::Comma)),
             ';' => Some(Token::Punctuation(Punctuation::Semicolon)),
-            ':' => Some(Token::Punctuation(Punctuation::Colon)),
             c if c.is_ascii_digit() => {
                 let start = self.position - 1; // we bumped before match
                 while let Some(c) = self.peek() {
@@ -65,7 +74,7 @@ impl<'input> Lexer<'input> {
                 }
                 let num_str = &self.input[start..self.position];
                 let value = num_str.parse::<i64>().expect("Non number value");
-                Some(Token::Number(value))
+                Some(Token::NumberLiteral(value))
             }
             c if c.is_alphabetic() => {
                 let start = self.position - 1; // we bumped before match
@@ -84,6 +93,8 @@ impl<'input> Lexer<'input> {
                     "else" => Some(Token::Keyword(Keyword::Else)),
                     "while" => Some(Token::Keyword(Keyword::While)),
                     "return" => Some(Token::Keyword(Keyword::Return)),
+                    "true" => Some(Token::BooleanLiteral(true)),
+                    "false" => Some(Token::BooleanLiteral(false)),
                     _ => Some(Token::Identifier(identifier.to_string())),
                 }
             }

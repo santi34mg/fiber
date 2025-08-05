@@ -2,7 +2,8 @@
 #[derive(Debug)]
 pub enum Token {
     Identifier(String),
-    Number(i64),
+    NumberLiteral(i64),
+    BooleanLiteral(bool),
     Keyword(Keyword),
     Operator(Operator),
     Punctuation(Punctuation),
@@ -47,5 +48,6 @@ pub enum Punctuation {
     OpenCurly,
     CloseCurly,
     Semicolon,
-    Colon,
+    ThinArrow,
+    Comma,
 }

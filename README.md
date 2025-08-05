@@ -18,27 +18,65 @@ type checking, IR generation, and code emission.
 The project is under active development and meant for learning, experimentation, 
 and laying the groundwork for a modern systems programming language.
 
-## Features
+## Minimal Language Feature Set (v0.1)
 
-Below is an overview of the desired features of the language
+## Lexical Analysis
+- [x] Keywords: `let`, `if`, `else`, `while`, `fn`, `return` 
+- [x] Identifiers (variable and function names)
+- [x] Integer literals
+- [x] Boolean literals: `true`, `false`
+- [ ] Arithmetic Operators: 
+    - [x] `+`: Addition
+    - [x] `-`: Substraction
+    - [ ] `*`: Multiplication
+    - [ ] `/`: Division
+- [ ] Logical Operators:
+    - [x] `==`: Equals
+    - [ ] `!=`: Different
+    - [ ] `<`: LessThan
+    - [ ] `>`: GreaterThan
+    - [ ] `<=`: LessEquals
+    - [ ] `>=`: GreaterEquals
+    - [ ] `&&`: And
+    - [ ] `||`: Or
+    - [ ] `!`: Not
+    - [ ] `^`: Exclusive or (XOR bitwise)
+- [x] Other Operators and Punctuation:
+    - [x] `=`: Assignment
+    - [x] `(`: Opening Parenthesis
+    - [x] `)`: Closing Parenthesis
+    - [x] `{`: Opening Curly Brace
+    - [x] `}`: Closing Curly Brace
+    - [x] `->`: Thin Arrow (Type specification)
+    - [x] `,`: Comma
+    - [x] `;`: Semicolon
 
-- C-like syntax
-- Memory model with explicit garbage-collected (`@`) and manual (`man`) allocations
-- Structs, tagged unions, and basic pattern matching
-- Interfaces with per-method explicit implementation syntax
-- Support for destructors and simple RAII for `man` types
-- File-based modules and a basic standard library
-- Downcasting via `type_id` matching on interface values
-- Support for coroutines or green threads.
-- Multi-pass, IR-based, AOT compiler
-  - Front-end: parsing, type checking, symbol resolution
-  - Middle-end: lowering to SSA, optimization, monomorphization
-  - Back-end: LLVM IR generation
-- Incremental compilation with module caching and API hashing
-- Lazy compilation of unused functions/types
-- Whole-program release mode with cross-module optimization
-- Fiber CLI for compilation, dependency resolution and testing
-- Git-based external package management with version pinning
+### Parsing
+- [ ] Variable declarations and assignments
+- [ ] Function definitions
+- [ ] Function calls with arguments
+- [ ] If/else expressions
+- [ ] While loops
+- [ ] Return statements
+- [ ] Expression grouping and operator precedence
+
+### Semantic Analysis
+- [ ] Type checking for integers and booleans
+- [ ] Function arity and return type checking
+- [ ] Variable scope resolution
+- [ ] Pointer type recognition (opaque, optional runtime use only)
+
+### Intermediate Representation & Code Generation
+- [ ] Arithmetic operations
+- [ ] Logical and comparison operations
+- [ ] Control flow: conditional branching, loops, function returns
+- [ ] Call stack management for function calls
+- [ ] Support for integer and boolean operations
+- [ ] Pointer-level operations (optional low-level access or address-of/dereference)
+
+### Runtime & Standard Library
+- [ ] `print()` for basic output
+- [ ] `read()` for basic input (e.g., read integer from stdin)
 
 ## Getting Started
 
