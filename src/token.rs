@@ -5,25 +5,47 @@ pub enum Token {
     Number(i64),
     Keyword(Keyword),
     Operator(Operator),
+    Punctuation(Punctuation),
     Unkown(char),
-    EOF,
 }
 
 #[derive(Debug)]
 pub enum Keyword {
     Let,
-    Fn,
     If,
     Else,
-    // More and more
+    While,
+    Return,
+    Fn,
 }
 
 
 #[derive(Debug)]
 pub enum Operator {
+    // Arithmetic
     Plus,
     Minus,
     Multply,
     Divide,
+    // Boolean opeartor
+    Equals,
+    Different,
+    GreaterThan,
+    LesserThan,
+    GreaterEqual,
+    LesserEqual,
+    // Assignments
     Assign,
+    Increment,
+    Decrement,
+}
+
+#[derive(Debug)]
+pub enum Punctuation {
+    OpenParen,
+    CloseParen,
+    OpenCurly,
+    CloseCurly,
+    Semicolon,
+    Colon,
 }
