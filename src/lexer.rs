@@ -9,6 +9,7 @@ impl<'input> Lexer<'input> {
     pub fn new(input: &'input str) -> Self {
         Self { input, position: 0 }
     }
+
     fn bump(&mut self) -> Option<char> {
         if self.position > self.input.len() {
             return None;
@@ -38,67 +39,88 @@ impl<'input> Lexer<'input> {
         let c = self.peek()?;
         self.bump();
         match c {
+            '=' => Some(self.lex_eq()),
             '+' => Some(Token::Operator(Operator::Plus)),
-            '-' => {
-                if let Some(c) = self.peek() {
-                    if c == '>' {
-                        self.bump();
-                        return Some(Token::Punctuation(Punctuation::ThinArrow));
-                    }
-                }
-                Some(Token::Operator(Operator::Minus))
-            }
-            '=' => {
-                if let Some(c) = self.peek() {
-                    if c == '=' {
-                        self.bump();
-                        return Some(Token::Operator(Operator::Equals));
-                    }
-                }
-                Some(Token::Operator(Operator::Assign))
-            }
+            '*' => Some(Token::Operator(Operator::Multply)),
+            '/' => Some(self.lex_slash()),
+            '-' => Some(Token::Operator(Operator::Minus)),
             '(' => Some(Token::Punctuation(Punctuation::OpenParen)),
             ')' => Some(Token::Punctuation(Punctuation::CloseParen)),
             '{' => Some(Token::Punctuation(Punctuation::OpenCurly)),
             '}' => Some(Token::Punctuation(Punctuation::CloseCurly)),
             ',' => Some(Token::Punctuation(Punctuation::Comma)),
             ';' => Some(Token::Punctuation(Punctuation::Semicolon)),
-            c if c.is_ascii_digit() => {
-                let start = self.position - 1; // we bumped before match
-                while let Some(c) = self.peek() {
-                    if c.is_ascii_digit() {
-                        self.bump();
-                    } else {
-                        break;
-                    }
-                }
-                let num_str = &self.input[start..self.position];
-                let value = num_str.parse::<i64>().expect("Non number value");
-                Some(Token::NumberLiteral(value))
-            }
-            c if c.is_alphabetic() => {
-                let start = self.position - 1; // we bumped before match
-                while let Some(c) = self.peek() {
-                    if c.is_alphanumeric() {
-                        self.bump();
-                    } else {
-                        break;
-                    }
-                }
-                let identifier = &self.input[start..self.position];
-                match identifier {
-                    "let" => Some(Token::Keyword(Keyword::Let)),
-                    "fn" => Some(Token::Keyword(Keyword::Fn)),
-                    "if" => Some(Token::Keyword(Keyword::If)),
-                    "else" => Some(Token::Keyword(Keyword::Else)),
-                    "while" => Some(Token::Keyword(Keyword::While)),
-                    "return" => Some(Token::Keyword(Keyword::Return)),
-                    "true" => Some(Token::BooleanLiteral(true)),
-                    "false" => Some(Token::BooleanLiteral(false)),
-                    _ => Some(Token::Identifier(identifier.to_string())),
-                }
-            }
+            ':' => Some(Token::Punctuation(Punctuation::Colon)),
+            c if c.is_ascii_digit() => Some(self.lex_number()),
+            c if c.is_alphabetic() => Some(self.lex_identifier()),
             _ => Some(Token::Unkown(c)),
+        }
+    }
+
+    fn lex_eq(&mut self) -> Token {
+        if let Some(c) = self.peek() {
+            if c == '=' {
+                self.bump();
+                return Token::Operator(Operator::Equals);
+            }
+        }
+        Token::Operator(Operator::Assign)
+    }
+
+    fn skip_line(&mut self) {
+        while let Some(c) = self.peek() {
+            if c == '\n' {
+                break;
+            } else {
+                self.bump();
+            }
+        }
+    }
+
+    fn lex_slash(&mut self) -> Token {
+        if let Some(c) = self.peek() {
+            if c == '/' {
+                self.skip_line()
+            }
+            return Token::Comment;
+        }
+        Token::Operator(Operator::Divide)
+    }
+
+    fn lex_number(&mut self) -> Token {
+        let start = self.position - 1; // we bumped before match
+        while let Some(c) = self.peek() {
+            if c.is_ascii_digit() {
+                self.bump();
+            } else {
+                break;
+            }
+        }
+        let num_str = &self.input[start..self.position];
+        let value = num_str.parse::<i64>().expect("Non number value");
+        Token::NumberLiteral(value)
+    }
+
+    fn lex_identifier(&mut self) -> Token {
+        let start = self.position - 1; // we bumped before match
+        while let Some(c) = self.peek() {
+            if c.is_alphanumeric() {
+                self.bump();
+            } else {
+                break;
+            }
+        }
+        let name = &self.input[start..self.position];
+        match name {
+            "let" => Token::Keyword(Keyword::Let),
+            "fn" => Token::Keyword(Keyword::Fn),
+            "if" => Token::Keyword(Keyword::If),
+            "else" => Token::Keyword(Keyword::Else),
+            "while" => Token::Keyword(Keyword::While),
+            "return" => Token::Keyword(Keyword::Return),
+            "true" => Token::BooleanLiteral(true),
+            "false" => Token::BooleanLiteral(false),
+            _ => Token::Identifier(name.to_string()),
         }
     }
 }
@@ -108,7 +130,6 @@ impl<'input> Iterator for Lexer<'input> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let token = self.lex_token();
-        // println!("{:?}", token);
         token
     }
 }

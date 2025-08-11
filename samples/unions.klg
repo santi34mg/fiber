@@ -1,0 +1,15 @@
+// declaration
+Token -> (
+    | Identifier -> str
+    | NumberLiteral -> i64
+    | BooleanLiteral -> bool
+    | Keyword
+    | Operator
+    | Punctuation
+    | Unkown -> u8
+)
+
+// initalization
+let token_id -> Token = Token|Identifier("Hello");
+let token_kw-> Token = Token|Keyword;
+

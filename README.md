@@ -25,11 +25,11 @@ and laying the groundwork for a modern systems programming language.
 - [x] Identifiers (variable and function names)
 - [x] Integer literals
 - [x] Boolean literals: `true`, `false`
-- [ ] Arithmetic Operators: 
+- [x] Arithmetic Operators: 
     - [x] `+`: Addition
     - [x] `-`: Substraction
-    - [ ] `*`: Multiplication
-    - [ ] `/`: Division
+    - [x] `*`: Multiplication
+    - [x] `/`: Division and comments (`//`)
 - [ ] Logical Operators:
     - [x] `==`: Equals
     - [ ] `!=`: Different
@@ -47,7 +47,7 @@ and laying the groundwork for a modern systems programming language.
     - [x] `)`: Closing Parenthesis
     - [x] `{`: Opening Curly Brace
     - [x] `}`: Closing Curly Brace
-    - [x] `->`: Thin Arrow (Type specification)
+    - [x] `:`: Semicolon
     - [x] `,`: Comma
     - [x] `;`: Semicolon
 
@@ -91,8 +91,9 @@ cargo build --release
 ### Compile a `.klg` source file:
 
 ```
-./target/release/fiber compile path/to/file.klg
+cargo run samples/main.klg
 ```
+> Note that structs and unions haven't been implemented yet.
 
 Currently, this will tokenize the input and print tokens to stdout as a debugging step.
 

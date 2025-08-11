@@ -8,6 +8,7 @@ pub enum Token {
     Operator(Operator),
     Punctuation(Punctuation),
     Unkown(char),
+    Comment,
 }
 
 #[derive(Debug)]
@@ -50,4 +51,5 @@ pub enum Punctuation {
     Semicolon,
     ThinArrow,
     Comma,
+    Colon,
 }
