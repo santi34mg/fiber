@@ -52,13 +52,14 @@ and laying the groundwork for a modern systems programming language.
     - [x] `;`: Semicolon
 
 ### Parsing
-- [ ] Variable declarations and assignments
+- [x] Variable declarations and assignments
 - [ ] Function definitions
 - [ ] Function calls with arguments
 - [ ] If/else expressions
 - [ ] While loops
 - [ ] Return statements
-- [ ] Expression grouping and operator precedence
+- [ ] Expression grouping
+- [x] Operator precedence
 
 ### Semantic Analysis
 - [ ] Type checking for integers and booleans
@@ -66,8 +67,8 @@ and laying the groundwork for a modern systems programming language.
 - [ ] Variable scope resolution
 - [ ] Pointer type recognition (opaque, optional runtime use only)
 
-### Intermediate Representation & Code Generation
-- [ ] Arithmetic operations
+### Intermediate Representation & Code Generation (Interpreter for now)
+- [x] Arithmetic operations
 - [ ] Logical and comparison operations
 - [ ] Control flow: conditional branching, loops, function returns
 - [ ] Call stack management for function calls
