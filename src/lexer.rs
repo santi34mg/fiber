@@ -1,13 +1,15 @@
-use crate::token::{Keyword, Operator, Punctuation, Token};
+use crate::token::{Keyword, Operator, Punctuation, Token, TokenKind};
 
 pub struct Lexer<'input> {
     input: &'input str,
     position: usize,
+    line: usize,
+    column: usize,
 }
 
 impl<'input> Lexer<'input> {
     pub fn new(input: &'input str) -> Self {
-        Self { input, position: 0 }
+        Self { input, position: 0, line: 0, column: 0 }
     }
 
     fn bump(&mut self) -> Option<char> {
@@ -15,6 +17,12 @@ impl<'input> Lexer<'input> {
             return None;
         }
         let c = self.peek()?;
+        if c == '\n' {
+            self.line += 1;
+            self.column = 1;
+        } else {
+            self.column += c.len_utf8();
+        }
         self.position += c.len_utf8();
         Some(c)
     }
@@ -38,33 +46,34 @@ impl<'input> Lexer<'input> {
 
         let c = self.peek()?;
         self.bump();
-        match c {
-            '=' => Some(self.lex_eq()),
-            '+' => Some(Token::Operator(Operator::Plus)),
-            '*' => Some(Token::Operator(Operator::Multply)),
-            '/' => Some(self.lex_slash()),
-            '-' => Some(Token::Operator(Operator::Minus)),
-            '(' => Some(Token::Punctuation(Punctuation::OpenParen)),
-            ')' => Some(Token::Punctuation(Punctuation::CloseParen)),
-            '{' => Some(Token::Punctuation(Punctuation::OpenCurly)),
-            '}' => Some(Token::Punctuation(Punctuation::CloseCurly)),
-            ',' => Some(Token::Punctuation(Punctuation::Comma)),
-            ';' => Some(Token::Punctuation(Punctuation::Semicolon)),
-            ':' => Some(Token::Punctuation(Punctuation::Colon)),
-            c if c.is_ascii_digit() => Some(self.lex_number()),
-            c if c.is_alphabetic() => Some(self.lex_identifier()),
-            _ => Some(Token::Unkown(c)),
-        }
+        let kind = match c {
+            '=' => self.lex_eq(),
+            '+' => TokenKind::Operator(Operator::Plus),
+            '*' => TokenKind::Operator(Operator::Multply),
+            '/' => self.lex_slash(),
+            '-' => TokenKind::Operator(Operator::Minus),
+            '(' => TokenKind::Punctuation(Punctuation::OpenParen),
+            ')' => TokenKind::Punctuation(Punctuation::CloseParen),
+            '{' => TokenKind::Punctuation(Punctuation::OpenCurly),
+            '}' => TokenKind::Punctuation(Punctuation::CloseCurly),
+            ',' => TokenKind::Punctuation(Punctuation::Comma),
+            ';' => TokenKind::Punctuation(Punctuation::Semicolon),
+            ':' => TokenKind::Punctuation(Punctuation::Colon),
+            c if c.is_ascii_digit() => self.lex_number(),
+            c if c.is_alphabetic() => self.lex_identifier(),
+            _ => TokenKind::Unkown(c),
+        };
+        Some(Token::new(kind, self.line, self.column))
     }
 
-    fn lex_eq(&mut self) -> Token {
+    fn lex_eq(&mut self) -> TokenKind {
         if let Some(c) = self.peek() {
             if c == '=' {
                 self.bump();
-                return Token::Operator(Operator::Equals);
+                return TokenKind::Operator(Operator::Equals);
             }
         }
-        Token::Operator(Operator::Assign)
+        TokenKind::Operator(Operator::Assign)
     }
 
     fn skip_line(&mut self) {
@@ -77,17 +86,17 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn lex_slash(&mut self) -> Token {
+    fn lex_slash(&mut self) -> TokenKind {
         if let Some(c) = self.peek() {
             if c == '/' {
                 self.skip_line()
             }
-            return Token::Comment;
+            return TokenKind::Comment;
         }
-        Token::Operator(Operator::Divide)
+        TokenKind::Operator(Operator::Divide)
     }
 
-    fn lex_number(&mut self) -> Token {
+    fn lex_number(&mut self) -> TokenKind {
         let start = self.position - 1; // we bumped before match
         while let Some(c) = self.peek() {
             if c.is_ascii_digit() {
@@ -97,11 +106,11 @@ impl<'input> Lexer<'input> {
             }
         }
         let num_str = &self.input[start..self.position];
-        let value = num_str.parse::<i64>().expect("Non number value");
-        Token::NumberLiteral(value)
+        let value = num_str.parse::<i32>().expect("Non number value");
+        TokenKind::NumberLiteral(value)
     }
 
-    fn lex_identifier(&mut self) -> Token {
+    fn lex_identifier(&mut self) -> TokenKind {
         let start = self.position - 1; // we bumped before match
         while let Some(c) = self.peek() {
             if c.is_alphanumeric() {
@@ -112,15 +121,15 @@ impl<'input> Lexer<'input> {
         }
         let name = &self.input[start..self.position];
         match name {
-            "let" => Token::Keyword(Keyword::Let),
-            "fn" => Token::Keyword(Keyword::Fn),
-            "if" => Token::Keyword(Keyword::If),
-            "else" => Token::Keyword(Keyword::Else),
-            "while" => Token::Keyword(Keyword::While),
-            "return" => Token::Keyword(Keyword::Return),
-            "true" => Token::BooleanLiteral(true),
-            "false" => Token::BooleanLiteral(false),
-            _ => Token::Identifier(name.to_string()),
+            "let" => TokenKind::Keyword(Keyword::Let),
+            "fn" => TokenKind::Keyword(Keyword::Fn),
+            "if" => TokenKind::Keyword(Keyword::If),
+            "else" => TokenKind::Keyword(Keyword::Else),
+            "while" => TokenKind::Keyword(Keyword::While),
+            "return" => TokenKind::Keyword(Keyword::Return),
+            "true" => TokenKind::BooleanLiteral(true),
+            "false" => TokenKind::BooleanLiteral(false),
+            _ => TokenKind::Identifier(name.to_string()),
         }
     }
 }

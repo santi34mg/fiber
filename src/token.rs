@@ -1,8 +1,24 @@
+// TODO: tokens should probably store line and column numbers
 
 #[derive(Debug)]
-pub enum Token {
+pub struct Token {
+    pub kind: TokenKind,
+    pub line: usize,
+    pub column: usize,
+}
+
+impl Token {
+    pub fn new(kind: TokenKind, line: usize, column: usize) -> Self {
+        return Self {
+            kind, line, column,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum TokenKind {
     Identifier(String),
-    NumberLiteral(i64),
+    NumberLiteral(i32),
     BooleanLiteral(bool),
     Keyword(Keyword),
     Operator(Operator),
@@ -22,7 +38,7 @@ pub enum Keyword {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Operator {
     // Arithmetic
     Plus,
@@ -49,7 +65,6 @@ pub enum Punctuation {
     OpenCurly,
     CloseCurly,
     Semicolon,
-    ThinArrow,
     Comma,
     Colon,
 }

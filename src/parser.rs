@@ -1,0 +1,297 @@
+use std::{iter::Peekable, ptr::swap_nonoverlapping};
+
+use crate::token::{Keyword, Operator, Token, TokenKind};
+
+#[derive(Debug)]
+pub struct Ast {
+    statements: Vec<Statement>,
+}
+
+#[derive(Debug)]
+enum Statement {
+    LetDecl(LetDecl),
+    Expr(Expr),
+}
+
+#[derive(Debug)]
+struct LetDecl {
+    identifier: String,
+    expr: Expr,
+}
+
+impl LetDecl {
+    fn new(identifier: String, expr: Expr) -> Self {
+        Self { identifier, expr }
+    }
+}
+
+#[derive(Debug)]
+enum Expr {
+    Binary {
+        left: Box<Expr>,
+        op: Operator,
+        right: Box<Expr>,
+    },
+    Number(i32),
+    Boolean(bool),
+    Ident(String),
+    Grouping(Box<Expr>),
+}
+
+impl Ast {
+    pub fn new() -> Self {
+        return Self {
+            statements: Vec::new(),
+        };
+    }
+}
+
+#[derive(Debug)]
+pub struct ParseError {
+    pub message: String,
+    pub line: usize,
+    pub column: usize,
+}
+
+pub struct Parser<I>
+where
+    I: Iterator<Item = Token>,
+{
+    tokens: Peekable<I>,
+}
+type ParseResult<T> = Result<T, ParseError>;
+
+impl<I> Parser<I>
+where
+    I: Iterator<Item = Token>,
+{
+    pub fn new(tokens: I) -> Self {
+        return Self {
+            tokens: tokens.peekable(),
+        };
+    }
+
+    fn peek(&mut self) -> Option<&Token> {
+        self.tokens.peek()
+    }
+
+    fn next(&mut self) -> Option<Token> {
+        self.tokens.next()
+    }
+
+    pub fn parse_program(&mut self) -> ParseResult<Ast> {
+        println!("parsing program");
+        let mut ast = Ast::new();
+        while let Some(_) = self.peek() {
+            let statement = self.parse_statement();
+            ast.statements.push(statement?);
+        }
+        Ok(ast)
+    }
+
+    fn parse_statement(&mut self) -> ParseResult<Statement> {
+        println!("parsing statement");
+        if let Some(token) = self.peek() {
+            match &token.kind {
+                TokenKind::Keyword(t) => match t {
+                    Keyword::Let => {
+                        let stmt = self.parse_let_decl()?;
+                        return Ok(Statement::LetDecl(stmt));
+                    }
+                    _ => {
+                        return Err(ParseError {
+                            message: "parse_statement: keyword not supported yet.".to_string(),
+                            line: token.line,
+                            column: token.column,
+                        });
+                    }
+                },
+                _ => {
+                    let expr = self.parse_expression()?;
+                    return Ok(Statement::Expr(expr));
+                }
+            }
+        } else {
+            return Err(ParseError {
+                message: "parse_statement: expected a token, found none".to_string(),
+                // TODO: need to get token but there is no next token
+                line: 0,
+                column: 0,
+            });
+        }
+    }
+
+    fn parse_let_decl(&mut self) -> ParseResult<LetDecl> {
+        println!("parsing let declaration");
+        // we get here because a let was found so we can bump
+        self.next();
+        // then we expect an identifier
+        let ident = if let Some(token) = self.next() {
+            match token.kind {
+                TokenKind::Identifier(ident) => ident,
+                _ => {
+                    return Err(ParseError {
+                        message: "parse_let_decl: unexpected token".to_string(),
+                        line: token.line,
+                        column: token.column,
+                    });
+                }
+            }
+        } else {
+            return Err(ParseError {
+                message: "parse_let_decl: expected a token, found none".to_string(),
+                // TODO: need to get token but there is no next token
+                line: 0,
+                column: 0,
+            });
+        };
+        // then we expect an =
+        if let Some(token) = self.next() {
+            match token.kind {
+                TokenKind::Operator(op) => match op {
+                    Operator::Assign => {}
+                    _ => {
+                        return Err(ParseError {
+                            message: "parse_let_decl: expected assignment".to_string(),
+                            line: token.line,
+                            column: token.column,
+                        });
+                    }
+                },
+                _ => {
+                    return Err(ParseError {
+                        message: "parse_let_decl: expected an =".to_string(),
+                        line: token.line,
+                        column: token.column,
+                    });
+                }
+            }
+        }
+        let expr = self.parse_expression()?;
+        let letdecl = LetDecl::new(ident, expr);
+        Ok(letdecl)
+    }
+
+    fn parse_expression(&mut self) -> ParseResult<Expr> {
+        println!("parsing expression");
+        // first parse left term
+        let left = Box::new(self.parse_term()?);
+        println!("got left on expression");
+        // then we expect a + or a -
+        let op;
+        // we expect some token
+        if let Some(token) = self.next() {
+            match token.kind {
+                TokenKind::Operator(oper) => {
+                    if let Operator::Plus | Operator::Minus = oper {
+                        op = oper;
+                    } else {
+                        return Err(ParseError {
+                            message: "parse_expression: unsupported operator".to_string(),
+                            line: token.line,
+                            column: token.column,
+                        });
+                    }
+                }
+                _ => {
+                    return Err(ParseError {
+                        message: "parse_expression: expected an operator".to_string(),
+                        line: token.line,
+                        column: token.column,
+                    });
+                }
+            };
+        } else {
+            return Err(ParseError {
+                message: "parse_expression: expected a token, found none".to_string(),
+                // TODO: need to get token but there is no next token
+                line: 0,
+                column: 0,
+            });
+        };
+        println!("got op on expression");
+        // then the right
+        let right = Box::new(self.parse_term()?);
+        println!("got right on expression");
+        Ok(Expr::Binary { left, op, right })
+    }
+
+    fn parse_term(&mut self) -> ParseResult<Expr> {
+        println!("parsing term");
+        // we first expect an atom
+        let left = Box::new(self.parse_atom()?);
+        println!("got left on term");
+
+        // then we expect a * or /
+        let op;
+        // we expect some token
+        if let Some(token) = self.next() {
+            match token.kind {
+                TokenKind::Operator(oper) => {
+                    if let Operator::Multply | Operator::Divide = oper {
+                        op = oper;
+                    } else {
+                        let msg = format!("parse_term: unsupported operator: {:?}", token);
+                        return Err(ParseError {
+                            message: msg.to_string(),
+                            line: token.line,
+                            column: token.column,
+                        });
+                    }
+                }
+                _ => {
+                    return Err(ParseError {
+                        message: "parse_term: expected an operator".to_string(),
+                        line: token.line,
+                        column: token.column,
+                    });
+                }
+            };
+        } else {
+            return Err(ParseError {
+                message: "parse_term: expected a token, found none".to_string(),
+                // TODO: need to get token but there is no next token
+                line: 0,
+                column: 0,
+            });
+        };
+        println!("got op on term");
+
+        // then a right term
+        let right = Box::new(self.parse_atom()?);
+        println!("got right on term");
+        Ok(Expr::Binary { left, op, right })
+    }
+
+    fn parse_atom(&mut self) -> ParseResult<Expr> {
+        println!("parsing atom");
+        if let Some(token) = self.next() {
+            match token.kind {
+                TokenKind::BooleanLiteral(bl) => {
+                    return Ok(Expr::Boolean(bl));
+                }
+                TokenKind::NumberLiteral(nl) => {
+                    return Ok(Expr::Number(nl));
+                }
+                TokenKind::Identifier(id) => {
+                    return Ok(Expr::Ident(id));
+                }
+                _ => {
+                    let msg = format!("parse_atom: expected an atom, found {:?}", token);
+                    return Err(ParseError {
+                        message: msg.to_string(),
+                        line: token.line,
+                        column: token.column,
+                    });
+                }
+            }
+        } else {
+            return Err(ParseError {
+                message: "parse_atom: expected a token, found none".to_string(),
+                // TODO: need to get token but there is no next token
+                line: 0,
+                column: 0,
+            });
+        };
+    }
+}
