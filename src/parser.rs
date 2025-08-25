@@ -178,42 +178,23 @@ where
         let left = Box::new(self.parse_term()?);
         println!("got left on expression");
         // then we expect a + or a -
-        let op;
         // we expect some token
-        if let Some(token) = self.next() {
+        if let Some(token) = self.peek() {
             match token.kind {
-                TokenKind::Operator(oper) => {
-                    if let Operator::Plus | Operator::Minus = oper {
-                        op = oper;
-                    } else {
-                        return Err(ParseError {
-                            message: "parse_expression: unsupported operator".to_string(),
-                            line: token.line,
-                            column: token.column,
-                        });
+                TokenKind::Operator(op) => {
+                    if let Operator::Plus | Operator::Minus = op {
+                        self.next();
+                        println!("got op on expression");
+                        // then the right
+                        let right = Box::new(self.parse_term()?);
+                        println!("got right on expression");
+                        return Ok(Expr::Binary { left, op, right });
                     }
                 }
-                _ => {
-                    return Err(ParseError {
-                        message: "parse_expression: expected an operator".to_string(),
-                        line: token.line,
-                        column: token.column,
-                    });
-                }
+                _ => {},
             };
-        } else {
-            return Err(ParseError {
-                message: "parse_expression: expected a token, found none".to_string(),
-                // TODO: need to get token but there is no next token
-                line: 0,
-                column: 0,
-            });
-        };
-        println!("got op on expression");
-        // then the right
-        let right = Box::new(self.parse_term()?);
-        println!("got right on expression");
-        Ok(Expr::Binary { left, op, right })
+        }
+        Ok(*left)
     }
 
     fn parse_term(&mut self) -> ParseResult<Expr> {
@@ -223,44 +204,23 @@ where
         println!("got left on term");
 
         // then we expect a * or /
-        let op;
         // we expect some token
-        if let Some(token) = self.next() {
+        if let Some(token) = self.peek() {
             match token.kind {
-                TokenKind::Operator(oper) => {
-                    if let Operator::Multply | Operator::Divide = oper {
-                        op = oper;
-                    } else {
-                        let msg = format!("parse_term: unsupported operator: {:?}", token);
-                        return Err(ParseError {
-                            message: msg.to_string(),
-                            line: token.line,
-                            column: token.column,
-                        });
+                TokenKind::Operator(op) => {
+                    if let Operator::Multply | Operator::Divide = op {
+                        self.next();
+                        println!("got op on term");
+                        // then a right term
+                        let right = Box::new(self.parse_atom()?);
+                        println!("got right on term");
+                        return Ok(Expr::Binary { left, op, right });
                     }
                 }
-                _ => {
-                    return Err(ParseError {
-                        message: "parse_term: expected an operator".to_string(),
-                        line: token.line,
-                        column: token.column,
-                    });
-                }
+                _ => {},
             };
-        } else {
-            return Err(ParseError {
-                message: "parse_term: expected a token, found none".to_string(),
-                // TODO: need to get token but there is no next token
-                line: 0,
-                column: 0,
-            });
-        };
-        println!("got op on term");
-
-        // then a right term
-        let right = Box::new(self.parse_atom()?);
-        println!("got right on term");
-        Ok(Expr::Binary { left, op, right })
+        }
+        Ok(*left)
     }
 
     fn parse_atom(&mut self) -> ParseResult<Expr> {
