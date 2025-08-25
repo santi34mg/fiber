@@ -1,4 +1,4 @@
-use std::{iter::Peekable, ptr::swap_nonoverlapping};
+use std::iter::Peekable;
 
 use crate::token::{Keyword, Operator, Token, TokenKind};
 
@@ -7,8 +7,14 @@ pub struct Ast {
     statements: Vec<Statement>,
 }
 
+impl Ast {
+    pub fn get_stmts(self) -> Vec<Statement> {
+        self.statements
+    }
+}
+
 #[derive(Debug)]
-enum Statement {
+pub enum Statement {
     LetDecl(LetDecl),
     Expr(Expr),
 }
@@ -26,7 +32,7 @@ impl LetDecl {
 }
 
 #[derive(Debug)]
-enum Expr {
+pub enum Expr {
     Binary {
         left: Box<Expr>,
         op: Operator,
