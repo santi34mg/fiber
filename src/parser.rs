@@ -17,12 +17,13 @@ impl Ast {
 pub enum Statement {
     LetDecl(LetDecl),
     Expr(Expr),
+    Comment,
 }
 
 #[derive(Debug)]
-struct LetDecl {
-    identifier: String,
-    expr: Expr,
+pub struct LetDecl {
+    pub identifier: String,
+    pub expr: Expr,
 }
 
 impl LetDecl {
@@ -86,7 +87,6 @@ where
     }
 
     pub fn parse_program(&mut self) -> ParseResult<Ast> {
-        println!("parsing program");
         let mut ast = Ast::new();
         while let Some(_) = self.peek() {
             let statement = self.parse_statement();
@@ -96,7 +96,6 @@ where
     }
 
     fn parse_statement(&mut self) -> ParseResult<Statement> {
-        println!("parsing statement");
         if let Some(token) = self.peek() {
             match &token.kind {
                 TokenKind::Keyword(t) => match t {
@@ -111,6 +110,10 @@ where
                             column: token.column,
                         });
                     }
+                },
+                TokenKind::Comment => {
+                    self.next();
+                    Ok(Statement::Comment)
                 },
                 _ => {
                     let expr = self.parse_expression()?;
@@ -128,7 +131,6 @@ where
     }
 
     fn parse_let_decl(&mut self) -> ParseResult<LetDecl> {
-        println!("parsing let declaration");
         // we get here because a let was found so we can bump
         self.next();
         // then we expect an identifier
@@ -179,10 +181,8 @@ where
     }
 
     fn parse_expression(&mut self) -> ParseResult<Expr> {
-        println!("parsing expression");
         // first parse left term
         let left = Box::new(self.parse_term()?);
-        println!("got left on expression");
         // then we expect a + or a -
         // we expect some token
         if let Some(token) = self.peek() {
@@ -190,24 +190,20 @@ where
                 TokenKind::Operator(op) => {
                     if let Operator::Plus | Operator::Minus = op {
                         self.next();
-                        println!("got op on expression");
                         // then the right
                         let right = Box::new(self.parse_term()?);
-                        println!("got right on expression");
                         return Ok(Expr::Binary { left, op, right });
                     }
                 }
-                _ => {},
+                _ => {}
             };
         }
         Ok(*left)
     }
 
     fn parse_term(&mut self) -> ParseResult<Expr> {
-        println!("parsing term");
         // we first expect an atom
         let left = Box::new(self.parse_atom()?);
-        println!("got left on term");
 
         // then we expect a * or /
         // we expect some token
@@ -216,21 +212,18 @@ where
                 TokenKind::Operator(op) => {
                     if let Operator::Multply | Operator::Divide = op {
                         self.next();
-                        println!("got op on term");
                         // then a right term
                         let right = Box::new(self.parse_atom()?);
-                        println!("got right on term");
                         return Ok(Expr::Binary { left, op, right });
                     }
                 }
-                _ => {},
+                _ => {}
             };
         }
         Ok(*left)
     }
 
     fn parse_atom(&mut self) -> ParseResult<Expr> {
-        println!("parsing atom");
         if let Some(token) = self.next() {
             match token.kind {
                 TokenKind::BooleanLiteral(bl) => {

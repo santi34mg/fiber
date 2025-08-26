@@ -15,7 +15,7 @@ impl Token {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TokenKind {
     Identifier(String),
     NumberLiteral(i32),
@@ -27,7 +27,7 @@ pub enum TokenKind {
     Comment,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Keyword {
     Let,
     If,
@@ -38,7 +38,7 @@ pub enum Keyword {
 }
 
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Operator {
     // Arithmetic
     Plus,
@@ -58,7 +58,7 @@ pub enum Operator {
     Decrement,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Punctuation {
     OpenParen,
     CloseParen,

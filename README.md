@@ -100,7 +100,9 @@ Currently, this will tokenize the input and print tokens to stdout as a debuggin
 
 ## Contributing
 
-Contributions, suggestions, and bug reports are welcome. This project is a personal exploration of compiler design and language implementation, but any help or feedback is appreciated.
+Contributions, suggestions, and bug reports are welcome. 
+This project is a personal exploration of compiler design and language implementation, 
+but any help or feedback is appreciated.
 
 ## License
 

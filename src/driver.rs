@@ -5,7 +5,6 @@ use crate::{lexer::Lexer, token::Token};
 pub fn run_lexer(_file: &String, src: &String) -> Vec<Token> {
     let lexer = Lexer::new(&src);
     let tokens = lexer.collect();
-    println!("{:?}", tokens);
     tokens
 }
 
@@ -18,4 +17,16 @@ pub fn run_parser(tokens: Vec<Token>) -> Ast {
 pub fn run_interpreter(ast: Ast) -> Vec<i32> {
     let interpreter = Interpreter::new();
     interpreter.eval(ast)
+}
+
+pub(crate) fn show_tokens(tokens: &Vec<Token>) {
+    println!("=====Showing Tokens=====");
+    for token in tokens {
+        println!("{:?}", token);
+    }
+}
+
+pub(crate) fn show_ast(ast: &Ast) {
+    println!("=====Showing AST=====");
+    println!("{:#?}", ast);
 }

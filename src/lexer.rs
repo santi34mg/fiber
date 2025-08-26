@@ -50,7 +50,7 @@ impl<'input> Lexer<'input> {
             '=' => self.lex_eq(),
             '+' => TokenKind::Operator(Operator::Plus),
             '*' => TokenKind::Operator(Operator::Multply),
-            '/' => self.lex_slash(),
+            '/' => self.lex_slash().unwrap(),
             '-' => TokenKind::Operator(Operator::Minus),
             '(' => TokenKind::Punctuation(Punctuation::OpenParen),
             ')' => TokenKind::Punctuation(Punctuation::CloseParen),
@@ -86,14 +86,16 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn lex_slash(&mut self) -> TokenKind {
+    fn lex_slash(&mut self) -> Option<TokenKind> {
         if let Some(c) = self.peek() {
             if c == '/' {
-                self.skip_line()
+                self.skip_line();
+                return Some(TokenKind::Comment);
             }
-            return TokenKind::Comment;
+            Some(TokenKind::Operator(Operator::Divide))
+        } else {
+            None
         }
-        TokenKind::Operator(Operator::Divide)
     }
 
     fn lex_number(&mut self) -> TokenKind {
