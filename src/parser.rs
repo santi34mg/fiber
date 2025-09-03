@@ -15,20 +15,20 @@ impl Ast {
 
 #[derive(Debug)]
 pub enum Statement {
-    LetDecl(LetDecl),
+    VarDecl(VarDecl),
     Expr(Expr),
     Comment,
 }
 
 #[derive(Debug)]
-pub struct LetDecl {
+pub struct VarDecl {
     pub identifier: String,
     pub expr: Expr,
 }
 
-impl LetDecl {
     fn new(identifier: String, expr: Expr) -> Self {
         Self { identifier, expr }
+impl VarDecl {
     }
 }
 
@@ -99,9 +99,9 @@ where
         if let Some(token) = self.peek() {
             match &token.kind {
                 TokenKind::Keyword(t) => match t {
-                    Keyword::Let => {
-                        let stmt = self.parse_let_decl()?;
-                        return Ok(Statement::LetDecl(stmt));
+                    Keyword::Var => {
+                        let stmt = self.parse_var_decl()?;
+                        return Ok(Statement::VarDecl(stmt));
                     }
                     _ => {
                         return Err(ParseError {
@@ -114,7 +114,7 @@ where
                 TokenKind::Comment => {
                     self.next();
                     Ok(Statement::Comment)
-                },
+                }
                 _ => {
                     let expr = self.parse_expression()?;
                     return Ok(Statement::Expr(expr));
@@ -130,7 +130,7 @@ where
         }
     }
 
-    fn parse_let_decl(&mut self) -> ParseResult<LetDecl> {
+    fn parse_var_decl(&mut self) -> ParseResult<VarDecl> {
         // we get here because a let was found so we can bump
         self.next();
         // then we expect an identifier
@@ -139,7 +139,7 @@ where
                 TokenKind::Identifier(ident) => ident,
                 _ => {
                     return Err(ParseError {
-                        message: "parse_let_decl: unexpected token".to_string(),
+                        message: "parse_var_decl: unexpected token".to_string(),
                         line: token.line,
                         column: token.column,
                     });
@@ -147,7 +147,20 @@ where
             }
         } else {
             return Err(ParseError {
-                message: "parse_let_decl: expected a token, found none".to_string(),
+                message: "parse_var_decl: expected a token, found none".to_string(),
+                // TODO: need to get token but there is no next token
+                line: 0,
+                column: 0,
+            });
+        };
+                        line: token.line,
+                        column: token.column,
+                    });
+                }
+            }
+        } else {
+            return Err(ParseError {
+                message: "parse_var_decl: expected a token, found none".to_string(),
                 // TODO: need to get token but there is no next token
                 line: 0,
                 column: 0,
@@ -160,7 +173,7 @@ where
                     Operator::Assign => {}
                     _ => {
                         return Err(ParseError {
-                            message: "parse_let_decl: expected assignment".to_string(),
+                            message: "parse_var_decl: expected assignment".to_string(),
                             line: token.line,
                             column: token.column,
                         });
@@ -168,7 +181,7 @@ where
                 },
                 _ => {
                     return Err(ParseError {
-                        message: "parse_let_decl: expected an =".to_string(),
+                        message: "parse_var_decl: expected an =".to_string(),
                         line: token.line,
                         column: token.column,
                     });
@@ -176,7 +189,7 @@ where
             }
         }
         let expr = self.parse_expression()?;
-        let letdecl = LetDecl::new(ident, expr);
+        let letdecl = VarDecl::new(ident, var_type, expr);
         Ok(letdecl)
     }
 
@@ -191,7 +204,7 @@ where
                     if let Operator::Plus | Operator::Minus = op {
                         self.next();
                         // then the right
-                        let right = Box::new(self.parse_term()?);
+                        let right = Box::new(self.parse_expression()?);
                         return Ok(Expr::Binary { left, op, right });
                     }
                 }
@@ -213,7 +226,7 @@ where
                     if let Operator::Multply | Operator::Divide = op {
                         self.next();
                         // then a right term
-                        let right = Box::new(self.parse_atom()?);
+                        let right = Box::new(self.parse_expression()?);
                         return Ok(Expr::Binary { left, op, right });
                     }
                 }

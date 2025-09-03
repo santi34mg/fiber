@@ -123,7 +123,7 @@ impl<'input> Lexer<'input> {
         }
         let name = &self.input[start..self.position];
         match name {
-            "let" => TokenKind::Keyword(Keyword::Let),
+            "var" => TokenKind::Keyword(Keyword::Var),
             "fn" => TokenKind::Keyword(Keyword::Fn),
             "if" => TokenKind::Keyword(Keyword::If),
             "else" => TokenKind::Keyword(Keyword::Else),

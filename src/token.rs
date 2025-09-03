@@ -1,5 +1,3 @@
-// TODO: tokens should probably store line and column numbers
-
 #[derive(Debug)]
 pub struct Token {
     pub kind: TokenKind,
@@ -29,7 +27,7 @@ pub enum TokenKind {
 
 #[derive(Debug, PartialEq)]
 pub enum Keyword {
-    Let,
+    Var,
     If,
     Else,
     While,
