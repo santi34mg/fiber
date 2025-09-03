@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    parser::{Ast, Expr, LetDecl, Statement},
+    parser::{Ast, Expr, Statement, VarDecl},
     token::Operator,
 };
 
@@ -21,13 +21,15 @@ impl Interpreter {
         for stmt in ast.get_stmts() {
             match stmt {
                 Statement::Expr(expr) => {
-                    let evaluated_expr = self.eval_expr(expr).expect("eval: could not evaluate expression");
+                    let evaluated_expr = self
+                        .eval_expr(expr)
+                        .expect("eval: could not evaluate expression");
                     results.push(evaluated_expr)
-                },
-                Statement::LetDecl(decl) => {
-                    self.eval_decl(decl).expect("eval: could not evaluate declaration")
-                },
-                Statement::Comment => {},
+                }
+                Statement::VarDecl(decl) => self
+                    .eval_decl(decl)
+                    .expect("eval: could not evaluate declaration"),
+                Statement::Comment => {}
             }
         }
         return results;
@@ -59,11 +61,13 @@ impl Interpreter {
                     _ => Err("eval_expr: wrong operator".to_string()),
                 }
             }
-            _ => Err("eval_expr: wrong expression".to_string()),
+            Expr::Grouping(expr) => {
+                self.eval_expr(*expr)
+            }
         }
     }
 
-    fn eval_decl(&mut self, decl: LetDecl) -> Result<(), String> {
+    fn eval_decl(&mut self, decl: VarDecl) -> Result<(), String> {
         let decl_val = self.eval_expr(decl.expr)?;
         self.env.insert(decl.identifier, decl_val);
         Ok(())

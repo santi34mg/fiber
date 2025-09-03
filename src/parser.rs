@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use crate::token::{Keyword, Operator, Token, TokenKind};
+use crate::token::{Keyword, Operator, Punctuation, Token, TokenKind, TypeIdentifier};
 
 #[derive(Debug)]
 pub struct Ast {
@@ -248,6 +248,25 @@ where
                 TokenKind::Identifier(id) => {
                     return Ok(Expr::Ident(id));
                 }
+                TokenKind::Punctuation(Punctuation::OpenParen) => {
+                    let inner_expr = self.parse_expression()?;
+
+                    let token = self.next().ok_or_else(|| ParseError {
+                        message: "parse_atom: expected ')' but found none".to_string(),
+                        line: 0,
+                        column: 0,
+                    })?;
+
+                    if let TokenKind::Punctuation(Punctuation::CloseParen) = token.kind {
+                        Ok(Expr::Grouping(Box::new(inner_expr)))
+                    } else {
+                        Err(ParseError {
+                            message: format!("parse_atom: expected ')', found {:?}", token.kind),
+                            line: token.line,
+                            column: token.column,
+                        })
+                    }
+                }
                 _ => {
                     let msg = format!("parse_atom: expected an atom, found {:?}", token);
                     return Err(ParseError {
@@ -264,6 +283,6 @@ where
                 line: 0,
                 column: 0,
             });
-        };
+        }
     }
 }
