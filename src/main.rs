@@ -3,6 +3,7 @@ mod token;
 mod lexer;
 mod parser;
 mod interpreter;
+mod type_checker;
 
 fn main() {
     let file = std::env::args().nth(1).expect("Missing file path");
@@ -11,7 +12,9 @@ fn main() {
     driver::show_tokens(&tokens);
     let ast = driver::run_parser(tokens);
     driver::show_ast(&ast);
-    let results = driver::run_interpreter(ast);
-    println!("{:?}", results);
+    // driver::show_ast(&ast);
+    // driver::run_type_checking(ast);
+    let result = driver::run_interpreter(ast);
+    println!("{:?}", result);
 }
 

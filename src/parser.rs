@@ -23,12 +23,17 @@ pub enum Statement {
 #[derive(Debug)]
 pub struct VarDecl {
     pub identifier: String,
+    pub var_type: TypeIdentifier,
     pub expr: Expr,
 }
 
-    fn new(identifier: String, expr: Expr) -> Self {
-        Self { identifier, expr }
 impl VarDecl {
+    fn new(identifier: String, var_type: TypeIdentifier, expr: Expr) -> Self {
+        Self {
+            identifier,
+            var_type,
+            expr,
+        }
     }
 }
 
@@ -87,6 +92,7 @@ where
     }
 
     pub fn parse_program(&mut self) -> ParseResult<Ast> {
+        println!("parse program");
         let mut ast = Ast::new();
         while let Some(_) = self.peek() {
             let statement = self.parse_statement();
@@ -96,6 +102,7 @@ where
     }
 
     fn parse_statement(&mut self) -> ParseResult<Statement> {
+        println!("parse statement");
         if let Some(token) = self.peek() {
             match &token.kind {
                 TokenKind::Keyword(t) => match t {
@@ -131,6 +138,7 @@ where
     }
 
     fn parse_var_decl(&mut self) -> ParseResult<VarDecl> {
+        println!("parse var declaration");
         // we get here because a let was found so we can bump
         self.next();
         // then we expect an identifier
@@ -153,6 +161,13 @@ where
                 column: 0,
             });
         };
+        // then we expect a type identifier
+        let var_type = if let Some(token) = self.next() {
+            match token.kind {
+                TokenKind::TypeIdentifier(t_ident) => t_ident,
+                _ => {
+                    return Err(ParseError {
+                        message: "parse_var_decl: unexpected token".to_string(),
                         line: token.line,
                         column: token.column,
                     });
@@ -194,6 +209,7 @@ where
     }
 
     fn parse_expression(&mut self) -> ParseResult<Expr> {
+        println!("parse expression");
         // first parse left term
         let left = Box::new(self.parse_term()?);
         // then we expect a + or a -
@@ -215,6 +231,7 @@ where
     }
 
     fn parse_term(&mut self) -> ParseResult<Expr> {
+        println!("parse term");
         // we first expect an atom
         let left = Box::new(self.parse_atom()?);
 
@@ -237,6 +254,7 @@ where
     }
 
     fn parse_atom(&mut self) -> ParseResult<Expr> {
+        println!("parse atom");
         if let Some(token) = self.next() {
             match token.kind {
                 TokenKind::BooleanLiteral(bl) => {

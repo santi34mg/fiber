@@ -16,6 +16,7 @@ impl Token {
 #[derive(Debug, PartialEq)]
 pub enum TokenKind {
     Identifier(String),
+    TypeIdentifier(TypeIdentifier),
     NumberLiteral(i32),
     BooleanLiteral(bool),
     Keyword(Keyword),
@@ -23,6 +24,13 @@ pub enum TokenKind {
     Punctuation(Punctuation),
     Unkown(char),
     Comment,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum TypeIdentifier {
+    Number,
+    Boolean,
+    UserDefinedType,
 }
 
 #[derive(Debug, PartialEq)]

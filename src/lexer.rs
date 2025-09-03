@@ -1,4 +1,4 @@
-use crate::token::{Keyword, Operator, Punctuation, Token, TokenKind};
+use crate::token::{Keyword, Operator, Punctuation, Token, TokenKind, TypeIdentifier};
 
 pub struct Lexer<'input> {
     input: &'input str,
@@ -129,6 +129,8 @@ impl<'input> Lexer<'input> {
             "else" => TokenKind::Keyword(Keyword::Else),
             "while" => TokenKind::Keyword(Keyword::While),
             "return" => TokenKind::Keyword(Keyword::Return),
+            "int" => TokenKind::TypeIdentifier(TypeIdentifier::Number),
+            "bool" => TokenKind::TypeIdentifier(TypeIdentifier::Boolean),
             "true" => TokenKind::BooleanLiteral(true),
             "false" => TokenKind::BooleanLiteral(false),
             _ => TokenKind::Identifier(name.to_string()),
