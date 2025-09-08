@@ -8,8 +8,8 @@ pub struct Ast {
 }
 
 impl Ast {
-    pub fn get_stmts(self) -> Vec<Statement> {
-        self.statements
+    pub fn get_stmts(&self) -> &Vec<Statement> {
+        &self.statements
     }
 }
 
@@ -64,6 +64,7 @@ pub struct ParseError {
     pub line: usize,
     pub column: usize,
 }
+type ParseResult<T> = Result<T, ParseError>;
 
 pub struct Parser<I>
 where
@@ -71,7 +72,6 @@ where
 {
     tokens: Peekable<I>,
 }
-type ParseResult<T> = Result<T, ParseError>;
 
 impl<I> Parser<I>
 where

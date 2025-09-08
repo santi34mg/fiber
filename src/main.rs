@@ -12,8 +12,8 @@ fn main() {
     driver::show_tokens(&tokens);
     let ast = driver::run_parser(tokens);
     driver::show_ast(&ast);
-    // driver::show_ast(&ast);
-    // driver::run_type_checking(ast);
+    driver::show_ast(&ast);
+    driver::run_type_checking(&ast);
     let result = driver::run_interpreter(ast);
     println!("{:?}", result);
 }

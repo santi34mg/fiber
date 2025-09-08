@@ -35,11 +35,11 @@ impl Interpreter {
         return results;
     }
 
-    fn eval_expr(&self, expr: Expr) -> Result<i32, String> {
+    fn eval_expr(&self, expr: &Expr) -> Result<i32, String> {
         match expr {
-            Expr::Number(n) => Ok(n),
+            Expr::Number(n) => Ok(*n),
             Expr::Boolean(b) => {
-                if b {
+                if *b {
                     Ok(0)
                 } else {
                     Ok(1)
@@ -47,12 +47,12 @@ impl Interpreter {
             }
             Expr::Ident(id) => self
                 .env
-                .get(&id)
+                .get(id)
                 .copied()
                 .ok_or("eval_expr: no value".to_string()),
             Expr::Binary { left, op, right } => {
-                let l = self.eval_expr(*left).unwrap();
-                let r = self.eval_expr(*right).unwrap();
+                let l = self.eval_expr(left).unwrap();
+                let r = self.eval_expr(right).unwrap();
                 match op {
                     Operator::Plus => Ok(l + r),
                     Operator::Minus => Ok(l - r),
@@ -62,14 +62,14 @@ impl Interpreter {
                 }
             }
             Expr::Grouping(expr) => {
-                self.eval_expr(*expr)
+                self.eval_expr(expr)
             }
         }
     }
 
-    fn eval_decl(&mut self, decl: VarDecl) -> Result<(), String> {
-        let decl_val = self.eval_expr(decl.expr)?;
-        self.env.insert(decl.identifier, decl_val);
+    fn eval_decl(&mut self, decl: &VarDecl) -> Result<(), String> {
+        let decl_val = self.eval_expr(&decl.expr)?;
+        self.env.insert(decl.identifier.clone(), decl_val);
         Ok(())
     }
 }
