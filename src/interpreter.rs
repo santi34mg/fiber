@@ -143,6 +143,17 @@ impl<'a> Interpreter<'a> {
 
                 Ok(return_value.unwrap_or(Value::Number(0)))
             }
+            Expr::Unary { op, expr } => {
+                if let Operator::Not = op {
+                    if let Value::Boolean(b) = self.eval_expr(expr)? {
+                        return Ok(Value::Boolean(!b));
+                    } else {
+                        return Err("eval_expr: non boolean type for ! operator".to_string());
+                    }
+                } else {
+                    return Err("eval_expr: unsupported unary operator".to_string());
+                }
+            }
         }
     }
 

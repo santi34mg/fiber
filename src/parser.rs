@@ -64,6 +64,10 @@ pub enum Expr {
         op: Operator,
         right: Box<Expr>,
     },
+    Unary {
+        op: Operator,
+        expr: Box<Expr>,
+    },
     Number(i32),
     Boolean(bool),
     Ident(String),
@@ -537,14 +541,14 @@ where
     }
 
     fn parse_term(&mut self) -> ParseResult<Expr> {
-        let mut expr = self.parse_atom()?;
+        let mut expr = self.parse_unary()?;
 
         while let Some(token) = self.peek() {
             match &token.kind {
                 TokenKind::Operator(op @ (Operator::Multply | Operator::Divide)) => {
                     let op = *op;
                     self.next();
-                    let right = Box::new(self.parse_atom()?);
+                    let right = Box::new(self.parse_unary()?);
                     expr = Expr::Binary {
                         left: Box::new(expr),
                         op,
@@ -555,6 +559,25 @@ where
             }
         }
         Ok(expr)
+    }
+
+    /// Parse unary expressions, including '!' for boolean negation.
+    fn parse_unary(&mut self) -> ParseResult<Expr> {
+        if let Some(token) = self.peek() {
+            match &token.kind {
+                TokenKind::Operator(Operator::Not) => {
+                    let _op_token = self.next().unwrap();
+                    let expr = self.parse_unary()?;
+                    Ok(Expr::Unary {
+                        op: Operator::Not,
+                        expr: Box::new(expr),
+                    })
+                }
+                _ => self.parse_atom(),
+            }
+        } else {
+            self.parse_atom()
+        }
     }
 
     fn parse_atom(&mut self) -> ParseResult<Expr> {

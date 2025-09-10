@@ -275,6 +275,24 @@ impl<'a> TypeChecker<'a> {
                     });
                 }
             }
+            Expr::Unary { op, expr } => {
+                let expr_type = self.check_expr(expr)?;
+                match op {
+                    Operator::Not => {
+                        if expr_type != TypeIdentifier::Boolean {
+                            return Err(TypeCheckerError {
+                                message: "Logical operators require boolean types".to_string(),
+                            });
+                        }
+                        TypeIdentifier::Boolean
+                    }
+                    _ => {
+                        return Err(TypeCheckerError {
+                            message: "Unsupported operator in unary expression".to_string(),
+                        });
+                    }
+                }
+            }
         };
         Ok(expr_type)
     }

@@ -40,7 +40,7 @@ and laying the groundwork for a modern systems programming language.
   - [x] `>=`: GreaterEquals
   - [x] `&&`: And
   - [x] `||`: Or
-  - [ ] `!`: Not
+  - [x] `!`: Not
   - [ ] `^`: Exclusive or (XOR bitwise)
 - [x] Other Operators and Punctuation:
   - [x] `=`: Assignment
