@@ -59,6 +59,10 @@ pub enum Operator {
     Assign,
     Increment,
     Decrement,
+    // Logical operators
+    And,
+    Or,
+    Not,
 }
 
 #[derive(Debug, Clone, PartialEq)]

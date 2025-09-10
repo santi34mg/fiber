@@ -72,7 +72,7 @@ impl<'input> Lexer<'input> {
                     self.bump();
                     TokenKind::Operator(Operator::Different)
                 } else {
-                    TokenKind::Unkown('!')
+                    TokenKind::Operator(Operator::Not)
                 }
             }
             '>' => {
@@ -123,6 +123,24 @@ impl<'input> Lexer<'input> {
                     TokenKind::Comment
                 } else {
                     TokenKind::Operator(Operator::Divide)
+                }
+            }
+            '&' => {
+                self.bump();
+                if self.peek() == Some('&') {
+                    self.bump();
+                    TokenKind::Operator(Operator::And)
+                } else {
+                    TokenKind::Unkown('&')
+                }
+            }
+            '|' => {
+                self.bump();
+                if self.peek() == Some('|') {
+                    self.bump();
+                    TokenKind::Operator(Operator::Or)
+                } else {
+                    TokenKind::Unkown('|')
                 }
             }
             '(' => {

@@ -35,10 +35,6 @@ impl<'a> Interpreter<'a> {
         self.stack.last_mut().expect("No stack frame")
     }
 
-    fn current_frame(&self) -> &StackFrame {
-        self.stack.last().expect("No stack frame")
-    }
-
     pub fn eval(mut self, ast: &'a Ast) -> Vec<Value> {
         // Collect function declarations first
         let statements = ast.get_stmts();
@@ -83,6 +79,8 @@ impl<'a> Interpreter<'a> {
                     (Value::Boolean(l), Value::Boolean(r)) => match op {
                         Operator::Equals => Ok(Value::Boolean(l == r)),
                         Operator::Different => Ok(Value::Boolean(l != r)),
+                        Operator::And => Ok(Value::Boolean(l && r)),
+                        Operator::Or => Ok(Value::Boolean(l || r)),
                         _ => Err("eval_expr: unsupported operator for booleans".to_string()),
                     },
                     _ => Err("eval_expr: type mismatch in binary operation".to_string()),

@@ -196,9 +196,21 @@ impl<'a> TypeChecker<'a> {
                     | Operator::LesserThan
                     | Operator::GreaterEqual
                     | Operator::LesserEqual => {
-                        if left_type != TypeIdentifier::Number {
+                        if left_type != TypeIdentifier::Number
+                            && right_type != TypeIdentifier::Number
+                        {
                             return Err(TypeCheckerError {
                                 message: "Comparison operators require number types".to_string(),
+                            });
+                        }
+                        TypeIdentifier::Boolean
+                    }
+                    Operator::And | Operator::Or => {
+                        if left_type != TypeIdentifier::Boolean
+                            && right_type != TypeIdentifier::Boolean
+                        {
+                            return Err(TypeCheckerError {
+                                message: "Logical operators require boolean types".to_string(),
                             });
                         }
                         TypeIdentifier::Boolean

@@ -1,12 +1,10 @@
 // Variable declarations and assignment
 var x int = 42;
-var y bool = true;
-var z int = x + 5 * (3 - 1);
 
 // Optional semicolon at the end
 var w int = 10
 
-// can push to an output array of the Interpreter by just writing expression
+// Interpreter only: can push to an output array of the interpreter by just writing expression
 w
 y
 
@@ -24,6 +22,17 @@ var is_diff bool = x != 0;
 var is_ge bool = x >= 42;
 var is_le bool = x <= 100;
 
+// Boolean literals
+var flag bool = false;
+
+// boolean grouping
+var b bool = (x == b) && (c != d || e)
+
+// if statements
+if (x > 1 && y < 2) || flag {
+    // ...
+}
+
 // Increment and decrement
 x++;
 x--
@@ -31,8 +40,6 @@ x--
 // Grouping and precedence
 var result int = (1 + 2) * (3 + 4);
 
-// Boolean literals
-var flag bool = false;
 
 // Comments
 // This is a comment
@@ -57,4 +64,8 @@ func factorial(x int) int {
 }
 
 var x int = factorial(5)
-x
+if x == 120 {
+    true
+} else {
+    false
+}

@@ -426,7 +426,45 @@ where
     }
 
     fn parse_expression(&mut self) -> ParseResult<Expr> {
-        self.parse_equality()
+        self.parse_logical_or()
+    }
+
+    fn parse_logical_or(&mut self) -> ParseResult<Expr> {
+        let mut expr = self.parse_logical_and()?;
+        while let Some(token) = self.peek() {
+            match &token.kind {
+                TokenKind::Operator(Operator::Or) => {
+                    self.next();
+                    let right = Box::new(self.parse_logical_and()?);
+                    expr = Expr::Binary {
+                        left: Box::new(expr),
+                        op: Operator::Or,
+                        right,
+                    };
+                }
+                _ => break,
+            }
+        }
+        Ok(expr)
+    }
+
+    fn parse_logical_and(&mut self) -> ParseResult<Expr> {
+        let mut expr = self.parse_equality()?;
+        while let Some(token) = self.peek() {
+            match &token.kind {
+                TokenKind::Operator(Operator::And) => {
+                    self.next();
+                    let right = Box::new(self.parse_equality()?);
+                    expr = Expr::Binary {
+                        left: Box::new(expr),
+                        op: Operator::And,
+                        right,
+                    };
+                }
+                _ => break,
+            }
+        }
+        Ok(expr)
     }
 
     /// Parse equality and comparison expressions (==, !=, >, <, >=, <=)
