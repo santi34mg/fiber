@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub kind: TokenKind,
     pub line: usize,
@@ -7,13 +7,11 @@ pub struct Token {
 
 impl Token {
     pub fn new(kind: TokenKind, line: usize, column: usize) -> Self {
-        return Self {
-            kind, line, column,
-        }
+        return Self { kind, line, column };
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     Identifier(String),
     TypeIdentifier(TypeIdentifier),
@@ -26,23 +24,22 @@ pub enum TokenKind {
     Comment,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum TypeIdentifier {
     Number,
     Boolean,
     UserDefinedType,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Keyword {
     Var,
     If,
     Else,
     While,
     Return,
-    Fn,
+    Func,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Operator {
@@ -64,7 +61,7 @@ pub enum Operator {
     Decrement,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Punctuation {
     OpenParen,
     CloseParen,

@@ -1,8 +1,8 @@
 mod driver;
-mod token;
+mod interpreter;
 mod lexer;
 mod parser;
-mod interpreter;
+mod token;
 mod type_checker;
 
 fn main() {
@@ -10,11 +10,13 @@ fn main() {
     let src = std::fs::read_to_string(&file).expect("Failed to read file");
     let tokens = driver::run_lexer(&file, &src);
     driver::show_tokens(&tokens);
-    let ast = driver::run_parser(tokens);
-    driver::show_ast(&ast);
+    let ast = driver::run_parser(tokens, file, src);
+    if ast.is_none() {
+        return;
+    }
+    let ast = ast.unwrap();
     driver::show_ast(&ast);
     driver::run_type_checking(&ast);
     let result = driver::run_interpreter(ast);
     println!("{:?}", result);
 }
-

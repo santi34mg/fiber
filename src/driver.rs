@@ -1,5 +1,5 @@
+use crate::interpreter::{Interpreter, Value};
 use crate::parser::{Ast, Parser};
-use crate::interpreter::Interpreter;
 use crate::type_checker::TypeChecker;
 use crate::{lexer::Lexer, token::Token};
 
@@ -9,21 +9,26 @@ pub fn run_lexer(_file: &String, src: &String) -> Vec<Token> {
     tokens
 }
 
-pub fn run_parser(tokens: Vec<Token>) -> Ast {
+pub fn run_parser(tokens: Vec<Token>, filename: String, source: String) -> Option<Ast> {
     // TODO: improve error handling
-    let mut parser = Parser::new(tokens.into_iter());
-    let ast = parser.parse_program().expect("Could not parse the program");
-    ast
+    let mut parser = Parser::new(tokens.into_iter(), filename, source);
+    match parser.parse_program() {
+        Ok(ast) => Some(ast),
+        Err(err) => {
+            println!("{}", err);
+            None
+        }
+    }
 }
 
 pub fn run_type_checking(ast: &Ast) {
-    let type_checker = TypeChecker::new(ast);
+    let mut type_checker = TypeChecker::new(ast);
     type_checker.check_ast();
 }
 
-pub fn run_interpreter(ast: Ast) -> Vec<i32> {
+pub fn run_interpreter(ast: Ast) -> Vec<Value> {
     let interpreter = Interpreter::new();
-    interpreter.eval(ast)
+    interpreter.eval(&ast)
 }
 
 pub(crate) fn show_tokens(tokens: &Vec<Token>) {
