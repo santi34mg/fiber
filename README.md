@@ -1,6 +1,6 @@
-# Fiber (Klog Compiler)
+# Fiber (Fib Compiler)
 
-This is an early-stage toy compiler project for Klog, a C-inspired language
+This is an early-stage toy compiler project for Fib, a C and Go inspired language
 designed for performance, clarity, and modern language features. The goal is to
 create a language and toolchain that combines low-level control with safer
 abstractions, ownership models, and ergonomics suited for systems programming
