@@ -4,10 +4,6 @@ var x int = 42;
 // Optional semicolon at the end
 var w int = 10
 
-// Interpreter only: can push to an output array of the interpreter by just writing expression
-w
-y
-
 // Arithmetic operators
 x = x + 1;
 x = x - 1;

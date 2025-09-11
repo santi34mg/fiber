@@ -1,0 +1,6 @@
+
+func main() {
+    alloc(32)
+}
+
+main()

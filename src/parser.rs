@@ -1,25 +1,49 @@
-use std::fmt;
 use std::iter::Peekable;
+use std::{fmt, sync::Arc};
 
+use crate::interpreter::Value;
 use crate::token::{Keyword, Operator, Punctuation, Token, TokenKind, TypeIdentifier};
 
 #[derive(Debug, Clone)]
 pub struct Ast {
-    statements: Vec<Statement>,
-}
-
-impl Ast {
-    pub fn get_stmts(&self) -> &Vec<Statement> {
-        &self.statements
-    }
+    pub statements: Vec<Statement>,
 }
 
 #[derive(Debug, Clone)]
-pub struct FuncDecl {
+pub struct Function {
+    pub signature: FunctionSignature,
+    pub body: FunctionBody,
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionSignature {
     pub name: String,
-    pub params: Vec<(String, TypeIdentifier)>,
+    pub parameters: Vec<FunctionParameter>,
     pub return_type: Option<TypeIdentifier>,
-    pub body: Vec<Statement>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionParameter {
+    pub parameter_name: String,
+    pub parameter_type: TypeIdentifier,
+}
+
+#[derive(Clone)]
+pub enum FunctionBody {
+    UserDefinedBody(Vec<Statement>),
+    NativeBody(Arc<dyn Fn(&[Value]) -> Value + Send + Sync>),
+}
+impl std::fmt::Debug for FunctionBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FunctionBody::UserDefinedBody(stmts) => {
+                f.debug_tuple("UserDefinedBody").field(stmts).finish()
+            }
+            FunctionBody::NativeBody(_) => {
+                f.debug_tuple("NativeBody").field(&"<native fn>").finish()
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -30,8 +54,7 @@ pub enum Statement {
         expr: Expr,
     },
     Expr(Expr),
-    Comment,
-    FuncDecl(FuncDecl),
+    FunctionDeclaration(Function),
     Return(Option<Expr>),
     If {
         condition: Expr,
@@ -200,56 +223,56 @@ where
             match &token.kind {
                 TokenKind::Keyword(Keyword::If) => {
                     self.next(); // consume 'if'
-                    let condition = self.parse_expression()?;
-                    self.expect_token(
-                        |t| matches!(t.kind, TokenKind::Punctuation(Punctuation::OpenCurly)),
-                        "parse_if: expected '{' after if condition",
-                    )?;
-                    let mut then_branch = Vec::new();
-                    while let Some(token) = self.peek() {
-                        if matches!(token.kind, TokenKind::Punctuation(Punctuation::CloseCurly)) {
-                            self.next();
-                            break;
-                        }
-                        then_branch.push(self.parse_statement()?);
-                    }
-                    // Check for optional else
-                    let else_branch = if let Some(token) = self.peek() {
-                        if matches!(token.kind, TokenKind::Keyword(Keyword::Else)) {
-                            self.next(); // consume 'else'
-                            self.expect_token(
-                                |t| {
-                                    matches!(t.kind, TokenKind::Punctuation(Punctuation::OpenCurly))
-                                },
-                                "parse_if: expected '{' after else",
-                            )?;
-                            let mut else_stmts = Vec::new();
-                            while let Some(token) = self.peek() {
-                                if matches!(
-                                    token.kind,
-                                    TokenKind::Punctuation(Punctuation::CloseCurly)
-                                ) {
-                                    self.next();
-                                    break;
-                                }
-                                else_stmts.push(self.parse_statement()?);
+                        let condition = self.parse_expression()?;
+                        self.expect_token(
+                            |t| matches!(t.kind, TokenKind::Punctuation(Punctuation::OpenCurly)),
+                            "parse_if: expected '{' after if condition",
+                        )?;
+                        let mut then_branch = Vec::new();
+                        while let Some(token) = self.peek() {
+                            if matches!(token.kind, TokenKind::Punctuation(Punctuation::CloseCurly)) {
+                                self.next();
+                                break;
                             }
-                            Some(else_stmts)
+                            then_branch.push(self.parse_statement()?);
+                        }
+                        // Check for optional else
+                        let else_branch = if let Some(token) = self.peek() {
+                            if matches!(token.kind, TokenKind::Keyword(Keyword::Else)) {
+                                self.next(); // consume 'else'
+                                self.expect_token(
+                                    |t| {
+                                        matches!(t.kind, TokenKind::Punctuation(Punctuation::OpenCurly))
+                                    },
+                                    "parse_if: expected '{' after else",
+                                )?;
+                                let mut else_stmts = Vec::new();
+                                while let Some(token) = self.peek() {
+                                    if matches!(
+                                        token.kind,
+                                        TokenKind::Punctuation(Punctuation::CloseCurly)
+                                    ) {
+                                        self.next();
+                                        break;
+                                    }
+                                    else_stmts.push(self.parse_statement()?);
+                                }
+                                Some(else_stmts)
+                            } else {
+                                None
+                            }
                         } else {
                             None
+                        };
+                        Statement::If {
+                            condition,
+                            then_branch,
+                            else_branch,
                         }
-                    } else {
-                        None
-                    };
-                    Statement::If {
-                        condition,
-                        then_branch,
-                        else_branch,
-                    }
                 }
                 TokenKind::Keyword(Keyword::Func) => {
-                    let func = self.parse_func_decl()?;
-                    Statement::FuncDecl(func)
+                    let user_function = self.parse_function_declaration()?;
+                    Statement::FunctionDeclaration(user_function)
                 }
                 TokenKind::Keyword(Keyword::Var) => {
                     let stmt = self.parse_var_decl()?;
@@ -274,10 +297,6 @@ where
                         Statement::Return(None)
                     }
                 }
-                TokenKind::Comment => {
-                    self.next();
-                    Statement::Comment
-                }
                 TokenKind::Identifier(_) => {
                     // Try to parse as assignment or increment/decrement
                     if self.is_assignment()? {
@@ -300,9 +319,15 @@ where
                         Statement::Expr(expr)
                     }
                 }
-                _ => {
-                    let expr = self.parse_expression()?;
-                    Statement::Expr(expr)
+                TokenKind::TypeIdentifier(_)
+                | TokenKind::Keyword(Keyword::While | Keyword::Else) // while unsupported for now
+                | TokenKind::NumberLiteral(_)
+                | TokenKind::BooleanLiteral(_)
+                | TokenKind::Operator(_)
+                | TokenKind::Punctuation(_)
+                | TokenKind::Unkown(_) => {
+                    let t = token.clone();
+                    return Err(self.error("unsupported", t.line, t.column));
                 }
             }
         } else {
@@ -641,7 +666,7 @@ where
         Ok(expr)
     }
 
-    fn parse_func_decl(&mut self) -> ParseResult<FuncDecl> {
+    fn parse_function_declaration(&mut self) -> ParseResult<Function> {
         self.expect_token(
             |t| matches!(t.kind, TokenKind::Keyword(Keyword::Func)),
             "parse_func_decl: expected 'func' keyword",
@@ -663,7 +688,7 @@ where
             |t| matches!(t.kind, TokenKind::Punctuation(Punctuation::OpenParen)),
             "parse_func_decl: expected '('",
         )?;
-        let mut params = Vec::new();
+        let mut args = Vec::new();
         while let Some(token) = self.peek() {
             match &token.kind {
                 TokenKind::Punctuation(Punctuation::CloseParen) => {
@@ -675,7 +700,7 @@ where
                         |t| matches!(t.kind, TokenKind::Identifier(_)),
                         "parse_func_decl: expected parameter name",
                     )?;
-                    let param_name = if let TokenKind::Identifier(n) = param_name_token.kind {
+                    let argument_name = if let TokenKind::Identifier(n) = param_name_token.kind {
                         n
                     } else {
                         unreachable!()
@@ -685,13 +710,17 @@ where
                         |t| matches!(t.kind, TokenKind::TypeIdentifier(_)),
                         "parse_func_decl: expected parameter type",
                     )?;
-                    let param_type = if let TokenKind::TypeIdentifier(t) = param_type_token.kind {
+                    let argument_type = if let TokenKind::TypeIdentifier(t) = param_type_token.kind
+                    {
                         t
                     } else {
                         unreachable!()
                     };
 
-                    params.push((param_name, param_type));
+                    args.push(FunctionParameter {
+                        parameter_name: argument_name,
+                        parameter_type: argument_type,
+                    });
 
                     // Optional comma
                     self.consume_if(|t| {
@@ -740,11 +769,13 @@ where
             body.push(self.parse_statement()?);
         }
 
-        Ok(FuncDecl {
-            name,
-            params,
-            return_type,
-            body,
+        Ok(Function {
+            signature: FunctionSignature {
+                name,
+                parameters: args,
+                return_type,
+            },
+            body: FunctionBody::UserDefinedBody(body),
         })
     }
 }

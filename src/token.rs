@@ -21,7 +21,6 @@ pub enum TokenKind {
     Operator(Operator),
     Punctuation(Punctuation),
     Unkown(char),
-    Comment,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]

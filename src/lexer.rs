@@ -56,130 +56,129 @@ impl<'input> Lexer<'input> {
         let start_col = self.column;
 
         let c = self.peek()?;
-        let kind = match c {
+        let kind: Option<TokenKind> = match c {
             '=' => {
                 self.bump();
                 if self.peek() == Some('=') {
                     self.bump();
-                    TokenKind::Operator(Operator::Equals)
+                    Some(TokenKind::Operator(Operator::Equals))
                 } else {
-                    TokenKind::Operator(Operator::Assign)
+                    Some(TokenKind::Operator(Operator::Assign))
                 }
             }
             '!' => {
                 self.bump();
                 if self.peek() == Some('=') {
                     self.bump();
-                    TokenKind::Operator(Operator::Different)
+                    Some(TokenKind::Operator(Operator::Different))
                 } else {
-                    TokenKind::Operator(Operator::Not)
+                    Some(TokenKind::Operator(Operator::Not))
                 }
             }
             '>' => {
                 self.bump();
                 if self.peek() == Some('=') {
                     self.bump();
-                    TokenKind::Operator(Operator::GreaterEqual)
+                    Some(TokenKind::Operator(Operator::GreaterEqual))
                 } else {
-                    TokenKind::Operator(Operator::GreaterThan)
+                    Some(TokenKind::Operator(Operator::GreaterThan))
                 }
             }
             '<' => {
                 self.bump();
                 if self.peek() == Some('=') {
                     self.bump();
-                    TokenKind::Operator(Operator::LesserEqual)
+                    Some(TokenKind::Operator(Operator::LesserEqual))
                 } else {
-                    TokenKind::Operator(Operator::LesserThan)
+                    Some(TokenKind::Operator(Operator::LesserThan))
                 }
             }
             '+' => {
                 self.bump();
                 if self.peek() == Some('+') {
                     self.bump();
-                    TokenKind::Operator(Operator::Increment)
+                    Some(TokenKind::Operator(Operator::Increment))
                 } else {
-                    TokenKind::Operator(Operator::Plus)
+                    Some(TokenKind::Operator(Operator::Plus))
                 }
             }
             '-' => {
                 self.bump();
                 if self.peek() == Some('-') {
                     self.bump();
-                    TokenKind::Operator(Operator::Decrement)
+                    Some(TokenKind::Operator(Operator::Decrement))
                 } else {
-                    TokenKind::Operator(Operator::Minus)
+                    Some(TokenKind::Operator(Operator::Minus))
                 }
             }
             '*' => {
                 self.bump();
-                TokenKind::Operator(Operator::Multply)
+                Some(TokenKind::Operator(Operator::Multply))
             }
             '/' => {
                 self.bump();
                 if self.peek() == Some('/') {
                     self.bump();
                     self.skip_while(|c| c != '\n');
-                    TokenKind::Comment
+                    None
                 } else {
-                    TokenKind::Operator(Operator::Divide)
+                    Some(TokenKind::Operator(Operator::Divide))
                 }
             }
             '&' => {
                 self.bump();
                 if self.peek() == Some('&') {
                     self.bump();
-                    TokenKind::Operator(Operator::And)
+                    Some(TokenKind::Operator(Operator::And))
                 } else {
-                    TokenKind::Unkown('&')
+                    Some(TokenKind::Unkown('&'))
                 }
             }
             '|' => {
                 self.bump();
                 if self.peek() == Some('|') {
                     self.bump();
-                    TokenKind::Operator(Operator::Or)
+                    Some(TokenKind::Operator(Operator::Or))
                 } else {
-                    TokenKind::Unkown('|')
+                    Some(TokenKind::Unkown('|'))
                 }
             }
             '(' => {
                 self.bump();
-                TokenKind::Punctuation(Punctuation::OpenParen)
+                Some(TokenKind::Punctuation(Punctuation::OpenParen))
             }
             ')' => {
                 self.bump();
-                TokenKind::Punctuation(Punctuation::CloseParen)
+                Some(TokenKind::Punctuation(Punctuation::CloseParen))
             }
             '{' => {
                 self.bump();
-                TokenKind::Punctuation(Punctuation::OpenCurly)
+                Some(TokenKind::Punctuation(Punctuation::OpenCurly))
             }
             '}' => {
                 self.bump();
-                TokenKind::Punctuation(Punctuation::CloseCurly)
+                Some(TokenKind::Punctuation(Punctuation::CloseCurly))
             }
             ',' => {
                 self.bump();
-                TokenKind::Punctuation(Punctuation::Comma)
+                Some(TokenKind::Punctuation(Punctuation::Comma))
             }
             ';' => {
                 self.bump();
-                TokenKind::Punctuation(Punctuation::Semicolon)
+                Some(TokenKind::Punctuation(Punctuation::Semicolon))
             }
             ':' => {
                 self.bump();
-                TokenKind::Punctuation(Punctuation::Colon)
+                Some(TokenKind::Punctuation(Punctuation::Colon))
             }
-            c if c.is_ascii_digit() => self.lex_number(),
-            c if c.is_alphabetic() => self.lex_identifier_or_keyword(),
+            c if c.is_ascii_digit() => Some(self.lex_number()),
+            c if c.is_alphabetic() => Some(self.lex_identifier_or_keyword()),
             c => {
                 self.bump();
-                TokenKind::Unkown(c)
+                Some(TokenKind::Unkown(c))
             }
         };
-
-        Some(Token::new(kind, start_line, start_col))
+        Some(Token::new(kind?, start_line, start_col))
     }
 
     fn lex_number(&mut self) -> TokenKind {

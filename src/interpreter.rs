@@ -1,8 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    parser::{Ast, Expr, FuncDecl, Statement, VarDecl},
-    token::Operator,
+    parser::{
+        Ast, Expr, Function, FunctionBody, FunctionParameter, FunctionSignature, Statement, VarDecl,
+    },
+    token::{Operator, TypeIdentifier},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -16,18 +18,48 @@ struct StackFrame {
     vars: HashMap<String, Value>,
 }
 
-pub struct Interpreter<'a> {
+pub struct Interpreter {
     stack: Vec<StackFrame>,
-    functions: HashMap<String, &'a FuncDecl>,
+    functions: HashMap<String, Function>,
 }
 
-impl<'a> Interpreter<'a> {
+fn load_std_functions() -> HashMap<String, Function> {
+    let mut std_functions = HashMap::new();
+    let alloc_parameters = FunctionParameter {
+        parameter_name: "size".to_string(),
+        parameter_type: TypeIdentifier::Number,
+    };
+    let alloc_signature = FunctionSignature {
+        name: "alloc".to_string(),
+        parameters: vec![alloc_parameters],
+        return_type: None,
+    };
+    let alloc_body = FunctionBody::NativeBody(Arc::new(|args| {
+        if let Some(Value::Number(size)) = args.get(0) {
+            // demo
+            println!("Allocating {} bytes", size);
+            Value::Number(*size)
+        } else {
+            panic!("alloc: expected an integer size argument");
+        }
+    }));
+    let alloc = Function {
+        signature: alloc_signature,
+        body: alloc_body,
+    };
+    std_functions.insert("alloc".to_string(), alloc);
+
+    std_functions
+}
+
+impl Interpreter {
     pub fn new() -> Self {
+        let std_functions = load_std_functions();
         Self {
             stack: vec![StackFrame {
                 vars: HashMap::new(),
             }],
-            functions: HashMap::new(),
+            functions: std_functions,
         }
     }
 
@@ -35,17 +67,18 @@ impl<'a> Interpreter<'a> {
         self.stack.last_mut().expect("No stack frame")
     }
 
-    pub fn eval(mut self, ast: &'a Ast) -> Vec<Value> {
+    pub fn eval(mut self, ast: Ast) -> Vec<Value> {
         // Collect function declarations first
-        let statements = ast.get_stmts();
-        for stmt in statements {
-            if let Statement::FuncDecl(func) = stmt {
-                self.functions.insert(func.name.clone(), func);
+        let statements = ast.statements;
+        for stmt in &statements {
+            if let Statement::FunctionDeclaration(function) = stmt {
+                self.functions
+                    .insert(function.signature.name.clone(), function.clone());
             }
         }
         let mut results = Vec::new();
         for stmt in statements {
-            match self.eval_statement(stmt) {
+            match self.eval_statement(&stmt) {
                 Ok(Some(v)) => results.push(v),
                 Ok(None) => {}
                 Err(e) => panic!("eval: {}", e),
@@ -97,17 +130,16 @@ impl<'a> Interpreter<'a> {
                     );
                 };
 
-                let func = self
+                let function = self
                     .functions
                     .get(func_name)
                     .cloned()
                     .ok_or_else(|| format!("eval_expr: function '{}' not found", func_name))?;
-
-                if args.len() != func.params.len() {
+                if args.len() != function.signature.parameters.len() {
                     return Err(format!(
                         "eval_expr: function '{}' expects {} arguments, got {}",
                         func_name,
-                        func.params.len(),
+                        function.signature.parameters.len(),
                         args.len()
                     ));
                 }
@@ -122,26 +154,38 @@ impl<'a> Interpreter<'a> {
                 let mut frame = StackFrame {
                     vars: HashMap::new(),
                 };
-                for ((param_name, _), value) in func.params.iter().zip(arg_values.into_iter()) {
-                    frame.vars.insert(param_name.clone(), value);
+                for (function_parameter, value) in function
+                    .signature
+                    .parameters
+                    .iter()
+                    .zip(arg_values.clone().into_iter())
+                {
+                    frame
+                        .vars
+                        .insert(function_parameter.parameter_name.clone(), value);
                 }
                 self.stack.push(frame);
 
                 // Evaluate function body
                 let mut return_value = None;
-                for stmt in &func.body {
-                    match self.eval_statement(stmt)? {
-                        Some(val) => {
-                            return_value = Some(val);
-                            break;
+                match &function.body {
+                    FunctionBody::UserDefinedBody(statements) => {
+                        for stmt in statements {
+                            match self.eval_statement(stmt)? {
+                                Some(val) => {
+                                    return_value = Some(val);
+                                    break;
+                                }
+                                None => {}
+                            }
                         }
-                        None => {}
                     }
+                    FunctionBody::NativeBody(f) => return_value = Some(f(arg_values.as_slice())),
                 }
 
                 self.stack.pop();
 
-                Ok(return_value.unwrap_or(Value::Number(0)))
+                Ok(return_value.unwrap_or(Value::Number(69)))
             }
             Expr::Unary { op, expr } => {
                 if let Operator::Not = op {
@@ -172,8 +216,7 @@ impl<'a> Interpreter<'a> {
                 let value = self.eval_expr(expr)?;
                 Ok(Some(value))
             }
-            Statement::Comment => Ok(None),
-            Statement::FuncDecl(_) => Ok(None),
+            Statement::FunctionDeclaration(_) => Ok(None),
             Statement::Return(expr) => {
                 if let Some(e) = expr {
                     let value = self.eval_expr(e)?;

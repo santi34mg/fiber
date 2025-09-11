@@ -28,7 +28,7 @@ pub fn run_type_checking(ast: &Ast) {
 
 pub fn run_interpreter(ast: Ast) -> Vec<Value> {
     let interpreter = Interpreter::new();
-    interpreter.eval(&ast)
+    interpreter.eval(ast)
 }
 
 pub(crate) fn show_tokens(tokens: &Vec<Token>) {

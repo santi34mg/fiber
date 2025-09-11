@@ -1,14 +1,16 @@
 use std::{collections::HashMap, fmt};
 
 use crate::{
-    parser::{Ast, Expr, FuncDecl, Statement, VarDecl},
+    parser::{
+        Ast, Expr, Function, FunctionBody, FunctionParameter, FunctionSignature, Statement, VarDecl,
+    },
     token::{Operator, TypeIdentifier},
 };
 
 pub struct TypeChecker<'a> {
     ast: &'a Ast,
     variables: HashMap<String, TypeIdentifier>,
-    functions: HashMap<String, (Vec<TypeIdentifier>, Option<TypeIdentifier>)>,
+    functions: HashMap<String, FunctionSignature>,
 }
 
 #[derive(Debug)]
@@ -24,17 +26,34 @@ impl fmt::Display for TypeCheckerError {
 
 type TypeCheckerResult<T> = Result<T, TypeCheckerError>;
 
+fn load_std_functions() -> HashMap<String, FunctionSignature> {
+    let mut function_signatures = HashMap::new();
+    let alloc_parameters = FunctionParameter {
+        parameter_name: "size".to_string(),
+        parameter_type: TypeIdentifier::Number,
+    };
+    let alloc_signature = FunctionSignature {
+        name: "alloc".to_string(),
+        parameters: vec![alloc_parameters],
+        return_type: None,
+    };
+    function_signatures.insert("alloc".to_string(), alloc_signature);
+
+    function_signatures
+}
+
 impl<'a> TypeChecker<'a> {
     pub fn new(ast: &'a Ast) -> Self {
+        let std_functions = load_std_functions();
         Self {
             ast,
             variables: HashMap::new(),
-            functions: HashMap::new(),
+            functions: std_functions,
         }
     }
 
     pub fn check_ast(&mut self) {
-        for statement in self.ast.get_stmts() {
+        for statement in &self.ast.statements {
             if let Some(err) = self.check_statement(statement).err() {
                 println!("{}", err);
             }
@@ -45,32 +64,38 @@ impl<'a> TypeChecker<'a> {
         match statement {
             Statement::VarDecl(var_decl) => self.check_var_decl(var_decl),
             Statement::Expr(expr) => self.check_expr(expr),
-            Statement::Comment => Ok(TypeIdentifier::UserDefinedType),
             Statement::Assignment { identifier, expr } => self.check_assignment(identifier, expr),
-            Statement::FuncDecl(func_decl) => self.check_func_decl(func_decl),
+            Statement::FunctionDeclaration(func_decl) => self.check_func_decl(func_decl),
             Statement::Return(expr) => self.check_return(expr),
             Statement::If {
                 condition,
                 then_branch,
                 else_branch,
-            } => {
-                let condition_type = self.check_expr(condition)?;
-                if condition_type != TypeIdentifier::Boolean {
-                    return Err(TypeCheckerError {
-                        message: format!("If condition has to be boolean"),
-                    });
-                };
-                for statement in then_branch {
-                    self.check_statement(statement)?;
-                }
-                if let Some(else_statements) = else_branch {
-                    for statement in else_statements {
-                        self.check_statement(statement)?;
-                    }
-                }
-                Ok(TypeIdentifier::Boolean)
+            } => self.check_if(condition, then_branch, else_branch),
+        }
+    }
+
+    fn check_if(
+        &mut self,
+        condition: &Expr,
+        then_branch: &Vec<Statement>,
+        else_branch: &Option<Vec<Statement>>,
+    ) -> TypeCheckerResult<TypeIdentifier> {
+        let condition_type = self.check_expr(condition)?;
+        if condition_type != TypeIdentifier::Boolean {
+            return Err(TypeCheckerError {
+                message: format!("If condition has to be boolean"),
+            });
+        };
+        for statement in then_branch {
+            self.check_statement(statement)?;
+        }
+        if let Some(else_statements) = else_branch {
+            for statement in else_statements {
+                self.check_statement(statement)?;
             }
         }
+        Ok(TypeIdentifier::Boolean)
     }
 
     fn check_var_decl(&mut self, var_decl: &VarDecl) -> TypeCheckerResult<TypeIdentifier> {
@@ -113,52 +138,45 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn check_func_decl(&mut self, func_decl: &FuncDecl) -> TypeCheckerResult<TypeIdentifier> {
-        let param_types: Vec<TypeIdentifier> =
-            func_decl.params.iter().map(|(_, t)| t.clone()).collect();
-        let return_type = func_decl.return_type.clone();
-        self.functions.insert(
-            func_decl.name.clone(),
-            (param_types.clone(), return_type.clone()),
-        );
+    fn check_func_decl(&mut self, function: &Function) -> TypeCheckerResult<TypeIdentifier> {
+        let function_name = function.signature.name.clone();
+        let return_type = function.signature.return_type.clone();
+        self.functions
+            .insert(function_name.clone(), function.signature.clone());
 
         // New scope for function body
         let mut local_vars = self.variables.clone();
-        for (name, ty) in &func_decl.params {
-            local_vars.insert(name.clone(), ty.clone());
+        for parameter in &function.signature.parameters {
+            local_vars.insert(function_name.clone(), parameter.parameter_type.clone());
         }
-        let mut checker = TypeChecker {
-            ast: self.ast,
-            variables: local_vars,
-            functions: self.functions.clone(),
-        };
 
         let mut found_return = false;
-        for stmt in &func_decl.body {
-            if let Statement::Return(expr) = stmt {
-                found_return = true;
-                let ret_type = checker.check_return(expr)?;
-                if let Some(expected) = &func_decl.return_type {
-                    if *expected != ret_type {
-                        return Err(TypeCheckerError {
-                            message: format!(
-                                "Function '{}' returns {:?}, but declared as {:?}",
-                                func_decl.name, ret_type, expected
-                            ),
-                        });
+        if let FunctionBody::UserDefinedBody(statements) = &function.body {
+            for stmt in statements {
+                if let Statement::Return(expr) = stmt {
+                    found_return = true;
+                    let ret_type = self.check_return(&expr)?;
+                    if let Some(expected) = return_type {
+                        if expected != ret_type {
+                            return Err(TypeCheckerError {
+                                message: format!(
+                                    "Function '{}' returns {:?}, but declared as {:?}",
+                                    function_name.clone(),
+                                    ret_type,
+                                    expected
+                                ),
+                            });
+                        }
                     }
+                } else {
+                    self.check_statement(&stmt)?;
                 }
-            } else {
-                checker.check_statement(stmt)?;
             }
         }
         // Optionally: check for missing return in non-void functions
-        if func_decl.return_type.is_some() && !found_return {
+        if function.signature.return_type.is_some() && !found_return {
             return Err(TypeCheckerError {
-                message: format!(
-                    "Function '{}' is missing a return statement",
-                    func_decl.name
-                ),
+                message: format!("Function '{}' is missing a return statement", function_name),
             });
         }
         Ok(TypeIdentifier::UserDefinedType)
@@ -228,53 +246,7 @@ impl<'a> TypeChecker<'a> {
             Expr::Number(_) => TypeIdentifier::Number,
             Expr::Boolean(_) => TypeIdentifier::Boolean,
             Expr::Grouping(expr) => self.check_expr(expr)?,
-            Expr::Call { callee, args } => {
-                // Only support identifier calls (e.g., foo(...))
-                if let Expr::Ident(func_name) = &**callee {
-                    // Lookup function signature
-                    let (param_types, return_type) =
-                        self.functions.get(func_name).ok_or(TypeCheckerError {
-                            message: format!("Call to undefined function '{}'", func_name),
-                        })?;
-
-                    // Check argument count
-                    if args.len() != param_types.len() {
-                        return Err(TypeCheckerError {
-                            message: format!(
-                                "Function '{}' expects {} arguments, got {}",
-                                func_name,
-                                param_types.len(),
-                                args.len()
-                            ),
-                        });
-                    }
-
-                    // Check argument types
-                    for (i, (arg, expected_ty)) in args.iter().zip(param_types.iter()).enumerate() {
-                        let arg_ty = self.check_expr(arg)?;
-                        if &arg_ty != expected_ty {
-                            return Err(TypeCheckerError {
-                                message: format!(
-                                    "Type mismatch in argument {} of '{}': expected {:?}, got {:?}",
-                                    i + 1,
-                                    func_name,
-                                    expected_ty,
-                                    arg_ty
-                                ),
-                            });
-                        }
-                    }
-
-                    // Return the function's return type (or UserDefinedType if None)
-                    return Ok(return_type
-                        .clone()
-                        .unwrap_or(TypeIdentifier::UserDefinedType));
-                } else {
-                    return Err(TypeCheckerError {
-                        message: "Only identifier function calls are supported".to_string(),
-                    });
-                }
-            }
+            Expr::Call { callee, args } => self.check_call(callee, args)?,
             Expr::Unary { op, expr } => {
                 let expr_type = self.check_expr(expr)?;
                 match op {
@@ -295,5 +267,61 @@ impl<'a> TypeChecker<'a> {
             }
         };
         Ok(expr_type)
+    }
+
+    fn check_call(
+        &self,
+        callee: &Box<Expr>,
+        args: &Vec<Expr>,
+    ) -> TypeCheckerResult<TypeIdentifier> {
+        // Only support identifier calls (e.g., foo(...))
+        if let Expr::Ident(func_name) = &**callee {
+            // Lookup function signature
+            let function_signature = self.functions.get(func_name).ok_or(TypeCheckerError {
+                message: format!("check_call: Call to undefined function '{}'", func_name),
+            })?;
+
+            // Check argument count
+            if args.len() != function_signature.parameters.len() {
+                return Err(TypeCheckerError {
+                    message: format!(
+                        "Function '{}' expects {} arguments, got {}",
+                        func_name,
+                        function_signature.parameters.len(),
+                        args.len()
+                    ),
+                });
+            }
+
+            // Check argument types
+            for (i, (arg, expected_ty)) in args
+                .iter()
+                .zip(function_signature.parameters.iter())
+                .enumerate()
+            {
+                let arg_ty = self.check_expr(arg)?;
+                if arg_ty != expected_ty.parameter_type {
+                    return Err(TypeCheckerError {
+                        message: format!(
+                            "Type mismatch in argument {} of '{}': expected {:?}, got {:?}",
+                            i + 1,
+                            func_name,
+                            expected_ty,
+                            arg_ty
+                        ),
+                    });
+                }
+            }
+
+            // Return the function's return type (or UserDefinedType if None)
+            return Ok(function_signature
+                .return_type
+                .clone()
+                .unwrap_or(TypeIdentifier::UserDefinedType));
+        } else {
+            return Err(TypeCheckerError {
+                message: "Only identifier function calls are supported".to_string(),
+            });
+        }
     }
 }
