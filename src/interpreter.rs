@@ -23,6 +23,68 @@ pub struct Interpreter {
     functions: HashMap<String, Function>,
 }
 
+impl Interpreter {
+    /// Register a user-defined or native function into the interpreter.
+    pub fn register_function(&mut self, function: Function) {
+        self.functions.insert(function.signature.name.clone(), function);
+    }
+
+    /// Call a registered function by name with arguments and return its Value.
+    pub fn call_function(&mut self, name: &str, args: &[Value]) -> Result<Value, String> {
+        let function = self
+            .functions
+            .get(name)
+            .cloned()
+            .ok_or_else(|| format!("call_function: function '{}' not found", name))?;
+
+        if args.len() != function.signature.parameters.len() {
+            return Err(format!(
+                "call_function: function '{}' expects {} arguments, got {}",
+                name,
+                function.signature.parameters.len(),
+                args.len()
+            ));
+        }
+
+        // Push new stack frame for function call
+        let mut frame = StackFrame {
+            vars: HashMap::new(),
+        };
+        for (function_parameter, value) in function
+            .signature
+            .parameters
+            .iter()
+            .zip(args.iter().cloned())
+        {
+            frame
+                .vars
+                .insert(function_parameter.parameter_name.clone(), value);
+        }
+        self.stack.push(frame);
+
+        // Evaluate function body
+        let mut return_value = None;
+        match &function.body {
+            FunctionBody::UserDefinedBody(statements) => {
+                for stmt in statements {
+                    match self.eval_statement(stmt)? {
+                        Some(val) => {
+                            return_value = Some(val);
+                            break;
+                        }
+                        None => {}
+                    }
+                }
+            }
+            FunctionBody::NativeBody(f) => return_value = Some(f(args)),
+        }
+
+        self.stack.pop();
+
+        Ok(return_value.unwrap_or(Value::Number(69)))
+    }
+}
+
 fn load_std_functions() -> HashMap<String, Function> {
     let mut std_functions = HashMap::new();
     let alloc_parameters = FunctionParameter {
@@ -34,11 +96,11 @@ fn load_std_functions() -> HashMap<String, Function> {
         parameters: vec![alloc_parameters],
         return_type: None,
     };
-    let alloc_body = FunctionBody::NativeBody(Arc::new(|args| {
-        if let Some(Value::Number(size)) = args.get(0) {
+    let alloc_body = FunctionBody::NativeBody(Arc::new(|args: &[crate::interpreter::Value]| -> crate::interpreter::Value {
+        if let Some(crate::interpreter::Value::Number(size)) = args.get(0) {
             // demo
             println!("Allocating {} bytes", size);
-            Value::Number(*size)
+            crate::interpreter::Value::Number(*size)
         } else {
             panic!("alloc: expected an integer size argument");
         }

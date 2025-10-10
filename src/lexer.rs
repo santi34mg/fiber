@@ -13,7 +13,7 @@ impl<'input> Lexer<'input> {
             input,
             position: 0,
             line: 1,
-            column: 0,
+            column: 1,
         }
     }
 

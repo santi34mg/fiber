@@ -1,7 +1,6 @@
 use std::iter::Peekable;
 use std::{fmt, sync::Arc};
 
-use crate::interpreter::Value;
 use crate::token::{Keyword, Operator, Punctuation, Token, TokenKind, TypeIdentifier};
 
 #[derive(Debug, Clone)]
@@ -31,7 +30,7 @@ pub struct FunctionParameter {
 #[derive(Clone)]
 pub enum FunctionBody {
     UserDefinedBody(Vec<Statement>),
-    NativeBody(Arc<dyn Fn(&[Value]) -> Value + Send + Sync>),
+    NativeBody(Arc<dyn Fn(&[crate::interpreter::Value]) -> crate::interpreter::Value + Send + Sync>),
 }
 impl std::fmt::Debug for FunctionBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

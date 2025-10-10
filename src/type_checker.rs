@@ -144,10 +144,12 @@ impl<'a> TypeChecker<'a> {
         self.functions
             .insert(function_name.clone(), function.signature.clone());
 
-        // New scope for function body
-        let mut local_vars = self.variables.clone();
+        // Create and swap in a new local scope for function body, then restore outer scope
+    let outer_scope = std::mem::take(&mut self.variables);
+        // populate parameters into the current (now empty clone) scope using parameter names
         for parameter in &function.signature.parameters {
-            local_vars.insert(function_name.clone(), parameter.parameter_type.clone());
+            self.variables
+                .insert(parameter.parameter_name.clone(), parameter.parameter_type.clone());
         }
 
         let mut found_return = false;
@@ -156,8 +158,10 @@ impl<'a> TypeChecker<'a> {
                 if let Statement::Return(expr) = stmt {
                     found_return = true;
                     let ret_type = self.check_return(&expr)?;
-                    if let Some(expected) = return_type {
+                    if let Some(expected) = return_type.clone() {
                         if expected != ret_type {
+                            // restore outer scope before returning
+                            self.variables = outer_scope;
                             return Err(TypeCheckerError {
                                 message: format!(
                                     "Function '{}' returns {:?}, but declared as {:?}",
@@ -173,6 +177,9 @@ impl<'a> TypeChecker<'a> {
                 }
             }
         }
+
+        // restore outer scope after checking the function body
+        self.variables = outer_scope;
         // Optionally: check for missing return in non-void functions
         if function.signature.return_type.is_some() && !found_return {
             return Err(TypeCheckerError {
@@ -214,9 +221,8 @@ impl<'a> TypeChecker<'a> {
                     | Operator::LesserThan
                     | Operator::GreaterEqual
                     | Operator::LesserEqual => {
-                        if left_type != TypeIdentifier::Number
-                            && right_type != TypeIdentifier::Number
-                        {
+                        // require both sides to be numbers
+                        if left_type != TypeIdentifier::Number || right_type != TypeIdentifier::Number {
                             return Err(TypeCheckerError {
                                 message: "Comparison operators require number types".to_string(),
                             });
@@ -224,8 +230,8 @@ impl<'a> TypeChecker<'a> {
                         TypeIdentifier::Boolean
                     }
                     Operator::And | Operator::Or => {
-                        if left_type != TypeIdentifier::Boolean
-                            && right_type != TypeIdentifier::Boolean
+                        // require both sides to be booleans
+                        if left_type != TypeIdentifier::Boolean || right_type != TypeIdentifier::Boolean
                         {
                             return Err(TypeCheckerError {
                                 message: "Logical operators require boolean types".to_string(),
