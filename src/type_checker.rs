@@ -28,16 +28,42 @@ type TypeCheckerResult<T> = Result<T, TypeCheckerError>;
 
 fn load_std_functions() -> HashMap<String, FunctionSignature> {
     let mut function_signatures = HashMap::new();
-    let alloc_parameters = FunctionParameter {
-        parameter_name: "size".to_string(),
+
+    // print_int(n int) -> None (accept any type)
+    let print_param = FunctionParameter {
+        parameter_name: "n".to_string(),
         parameter_type: TypeIdentifier::Number,
     };
-    let alloc_signature = FunctionSignature {
-        name: "alloc".to_string(),
-        parameters: vec![alloc_parameters],
+    let print_signature = FunctionSignature {
+        name: "print_int".to_string(),
+        parameters: vec![print_param.clone()],
         return_type: None,
     };
-    function_signatures.insert("alloc".to_string(), alloc_signature);
+    function_signatures.insert("print_int".to_string(), print_signature);
+
+    // println(v) -> None (accept any type)
+    let println_signature = FunctionSignature {
+        name: "println".to_string(),
+        parameters: vec![print_param],
+        return_type: None,
+    };
+    function_signatures.insert("println".to_string(), println_signature);
+
+    // read_int() -> Number
+    let read_int_signature = FunctionSignature {
+        name: "read_int".to_string(),
+        parameters: vec![],
+        return_type: Some(TypeIdentifier::Number),
+    };
+    function_signatures.insert("read_int".to_string(), read_int_signature);
+
+    // read_char() -> Char
+    let read_char_signature = FunctionSignature {
+        name: "read_char".to_string(),
+        parameters: vec![],
+        return_type: Some(TypeIdentifier::Char),
+    };
+    function_signatures.insert("read_char".to_string(), read_char_signature);
 
     function_signatures
 }
@@ -251,6 +277,7 @@ impl<'a> TypeChecker<'a> {
             })?,
             Expr::Number(_) => TypeIdentifier::Number,
             Expr::Boolean(_) => TypeIdentifier::Boolean,
+            Expr::Char(_) => TypeIdentifier::Char,
             Expr::Grouping(expr) => self.check_expr(expr)?,
             Expr::Call { callee, args } => self.check_call(callee, args)?,
             Expr::Unary { op, expr } => {

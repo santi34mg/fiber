@@ -1,6 +1,4 @@
 
 func main() {
-    alloc(32)
+    print_int(10)
 }
-
-main()

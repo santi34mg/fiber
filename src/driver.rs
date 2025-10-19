@@ -15,14 +15,16 @@ pub fn run_pipeline(file: String, entry_function: Option<String>) {
     // Optionally display tokens during development
     // driver::show_tokens(&tokens);
     let ast_opt = run_parser(tokens, file.clone(), src.clone());
-    if ast_opt.is_none() {
-        process::exit(1);
-    }
-    let ast = ast_opt.unwrap();
+    let ast = match ast_opt {
+        Some(a) => a,
+        None => process::exit(1),
+    };
     // driver::show_ast(&ast);
     run_type_checking(&ast);
 
-    // If an entry function is requested, use driver to call it; otherwise evaluate the program normally
+    // If an entry function is requested, use driver to call it.
+    // Otherwise, if there's a function named "main" in the AST, run that automatically.
+    // If neither applies, evaluate the program normally.
     if let Some(fn_name) = entry_function {
         match run_entry(ast, &fn_name) {
             Ok(vals) => {
@@ -36,8 +38,38 @@ pub fn run_pipeline(file: String, entry_function: Option<String>) {
             }
         }
     } else {
-        let result = run_interpreter(ast);
-        println!("{:?}", result);
+        // Detect a user-defined `main` function and run it automatically if present
+        let mut has_main = false;
+        for stmt in &ast.statements {
+            if let Statement::FunctionDeclaration(function) = stmt {
+                if function.signature.name == "main" {
+                    has_main = true;
+                    break;
+                }
+            }
+        }
+
+        if has_main {
+            match run_entry(ast, "main") {
+                Ok(vals) => {
+                    for v in vals {
+                        println!("{:?}", v);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error running entry function 'main': {}", e);
+                    process::exit(1);
+                }
+            }
+        } else {
+            match run_interpreter(ast) {
+                Ok(()) => {},
+                Err(e) => {
+                    eprintln!("Interpreter error: {}", e);
+                    process::exit(1);
+                }
+            }
+        }
     }
 }
 
@@ -64,8 +96,14 @@ pub fn run_type_checking(ast: &Ast) {
     type_checker.check_ast();
 }
 
-pub fn run_interpreter(ast: Ast) -> Vec<Value> {
-    let interpreter = Interpreter::new();
+pub fn run_interpreter(ast: Ast) -> Result<(), String> {
+    let mut interpreter = Interpreter::new();
+    // Register functions from AST
+    for stmt in &ast.statements {
+        if let Statement::FunctionDeclaration(f) = stmt {
+            interpreter.register_function(f.clone());
+        }
+    }
     interpreter.eval(ast)
 }
 
@@ -93,6 +131,7 @@ pub fn run_entry(ast: Ast, function_name: &str) -> Result<Vec<Value>, String> {
     Err(format!("entry function '{}' not found", function_name))
 }
 
+#[allow(dead_code)]
 pub(crate) fn show_tokens(tokens: &Vec<Token>) {
     println!("=====Showing Tokens=====");
     for token in tokens {
@@ -100,6 +139,7 @@ pub(crate) fn show_tokens(tokens: &Vec<Token>) {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn show_ast(ast: &Ast) {
     println!("=====Showing AST=====");
     println!("{:#?}", ast);
