@@ -1,113 +1,9 @@
 use std::iter::Peekable;
-use std::{fmt, sync::Arc};
+use std::fmt;
 
-use crate::interpreter::Value;
-use crate::token::{Keyword, Operator, Punctuation, Token, TokenKind, TypeIdentifier};
-
-#[derive(Debug, Clone)]
-pub struct Ast {
-    pub statements: Vec<Statement>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Function {
-    pub signature: FunctionSignature,
-    pub body: FunctionBody,
-}
-
-#[derive(Debug, Clone)]
-pub struct FunctionSignature {
-    pub name: String,
-    pub parameters: Vec<FunctionParameter>,
-    pub return_type: Option<TypeIdentifier>,
-}
-
-#[derive(Debug, Clone)]
-pub struct FunctionParameter {
-    pub parameter_name: String,
-    pub parameter_type: TypeIdentifier,
-}
-
-#[derive(Clone)]
-pub enum FunctionBody {
-    UserDefinedBody(Vec<Statement>),
-    NativeBody(Arc<dyn Fn(&[Value]) -> Value + Send + Sync>),
-}
-impl std::fmt::Debug for FunctionBody {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FunctionBody::UserDefinedBody(stmts) => {
-                f.debug_tuple("UserDefinedBody").field(stmts).finish()
-            }
-            FunctionBody::NativeBody(_) => {
-                f.debug_tuple("NativeBody").field(&"<native fn>").finish()
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum Statement {
-    VarDecl(VarDecl),
-    Assignment {
-        identifier: String,
-        expr: Expr,
-    },
-    Expr(Expr),
-    FunctionDeclaration(Function),
-    Return(Option<Expr>),
-    If {
-        condition: Expr,
-        then_branch: Vec<Statement>,
-        else_branch: Option<Vec<Statement>>,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub struct VarDecl {
-    pub identifier: String,
-    pub var_type: TypeIdentifier,
-    pub expr: Expr,
-}
-
-impl VarDecl {
-    fn new(identifier: String, var_type: TypeIdentifier, expr: Expr) -> Self {
-        Self {
-            identifier,
-            var_type,
-            expr,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum Expr {
-    Binary {
-        left: Box<Expr>,
-        op: Operator,
-        right: Box<Expr>,
-    },
-    Unary {
-        op: Operator,
-        expr: Box<Expr>,
-    },
-    Number(i32),
-    Boolean(bool),
-    Ident(String),
-    Grouping(Box<Expr>),
-    Call {
-        callee: Box<Expr>,
-        args: Vec<Expr>,
-    },
-}
-
-impl Ast {
-    pub fn new() -> Self {
-        return Self {
-            statements: Vec::new(),
-        };
-    }
-}
+use crate::parser::function::{FunctionBody, FunctionParameter, FunctionSignature};
+use crate::parser::{Ast, Expr, Function, Statement, VarDecl};
+use crate::token::{Keyword, Operator, Punctuation, Token, TokenKind};
 
 #[derive(Debug)]
 pub struct ParseError {
@@ -224,39 +120,13 @@ where
                 TokenKind::Keyword(Keyword::If) => {
                     self.next(); // consume 'if'
                         let condition = self.parse_expression()?;
-                        self.expect_token(
-                            |t| matches!(t.kind, TokenKind::Punctuation(Punctuation::OpenCurly)),
-                            "parse_if: expected '{' after if condition",
-                        )?;
-                        let mut then_branch = Vec::new();
-                        while let Some(token) = self.peek() {
-                            if matches!(token.kind, TokenKind::Punctuation(Punctuation::CloseCurly)) {
-                                self.next();
-                                break;
-                            }
-                            then_branch.push(self.parse_statement()?);
-                        }
+                        // Parse then-branch using shared parse_body
+                        let then_branch = self.parse_body()?;
                         // Check for optional else
                         let else_branch = if let Some(token) = self.peek() {
                             if matches!(token.kind, TokenKind::Keyword(Keyword::Else)) {
                                 self.next(); // consume 'else'
-                                self.expect_token(
-                                    |t| {
-                                        matches!(t.kind, TokenKind::Punctuation(Punctuation::OpenCurly))
-                                    },
-                                    "parse_if: expected '{' after else",
-                                )?;
-                                let mut else_stmts = Vec::new();
-                                while let Some(token) = self.peek() {
-                                    if matches!(
-                                        token.kind,
-                                        TokenKind::Punctuation(Punctuation::CloseCurly)
-                                    ) {
-                                        self.next();
-                                        break;
-                                    }
-                                    else_stmts.push(self.parse_statement()?);
-                                }
+                                let else_stmts = self.parse_body()?;
                                 Some(else_stmts)
                             } else {
                                 None
@@ -319,10 +189,24 @@ where
                         Statement::Expr(expr)
                     }
                 }
+                TokenKind::Keyword(Keyword::While) => {
+                    // For simplicity, treat while as an expression statement for now
+                    self.next(); // consume 'while'
+                    let condition = self.parse_expression()?;
+                    // Use shared parse_body to consume the block
+                    let _body = self.parse_body()?;
+                    // Represent while as a function call for now (to be implemented properly later)
+                    let while_expr = Expr::Call {
+                        callee: Box::new(Expr::Ident("while".to_string())),
+                        args: vec![condition], // Incomplete representation
+                    };
+                    Statement::Expr(while_expr)
+                }
                 TokenKind::TypeIdentifier(_)
-                | TokenKind::Keyword(Keyword::While | Keyword::Else) // while unsupported for now
+                | TokenKind::Keyword(Keyword::Else)
                 | TokenKind::NumberLiteral(_)
                 | TokenKind::BooleanLiteral(_)
+                | TokenKind::CharLiteral(_)
                 | TokenKind::Operator(_)
                 | TokenKind::Punctuation(_)
                 | TokenKind::Unkown(_) => {
@@ -588,17 +472,16 @@ where
 
     /// Parse unary expressions, including '!' for boolean negation.
     fn parse_unary(&mut self) -> ParseResult<Expr> {
-        if let Some(token) = self.peek() {
-            match &token.kind {
-                TokenKind::Operator(Operator::Not) => {
-                    let _op_token = self.next().unwrap();
-                    let expr = self.parse_unary()?;
-                    Ok(Expr::Unary {
-                        op: Operator::Not,
-                        expr: Box::new(expr),
-                    })
-                }
-                _ => self.parse_atom(),
+        if let Some(_) = self.peek() {
+            // If there's a '!' operator, consume it and parse unary recursively
+            if let Some(_op_token) = self.consume_if(|t| matches!(t.kind, TokenKind::Operator(Operator::Not))) {
+                let expr = self.parse_unary()?;
+                Ok(Expr::Unary {
+                    op: Operator::Not,
+                    expr: Box::new(expr),
+                })
+            } else {
+                self.parse_atom()
             }
         } else {
             self.parse_atom()
@@ -610,6 +493,7 @@ where
         let mut expr = match token.kind {
             TokenKind::BooleanLiteral(bl) => Expr::Boolean(bl),
             TokenKind::NumberLiteral(nl) => Expr::Number(nl),
+            TokenKind::CharLiteral(c) => Expr::Char(c),
             TokenKind::Identifier(id) => Expr::Ident(id),
             TokenKind::Punctuation(Punctuation::OpenParen) => {
                 let inner_expr = self.parse_expression()?;
@@ -740,14 +624,9 @@ where
         }
 
         // Optional return type
-        let return_type = if let Some(token) = self.peek() {
-            if let TokenKind::TypeIdentifier(_) = token.kind {
-                let ret_type_token = self.next().unwrap();
-                if let TokenKind::TypeIdentifier(t) = ret_type_token.kind {
-                    Some(t)
-                } else {
-                    None
-                }
+        let return_type = if let Some(ret_type_token) = self.consume_if(|t| matches!(t.kind, TokenKind::TypeIdentifier(_))) {
+            if let TokenKind::TypeIdentifier(t) = ret_type_token.kind {
+                Some(t)
             } else {
                 None
             }
@@ -755,19 +634,8 @@ where
             None
         };
 
-        // Function body
-        self.expect_token(
-            |t| matches!(t.kind, TokenKind::Punctuation(Punctuation::OpenCurly)),
-            "parse_func_decl: expected '{'",
-        )?;
-        let mut body = Vec::new();
-        while let Some(token) = self.peek() {
-            if matches!(token.kind, TokenKind::Punctuation(Punctuation::CloseCurly)) {
-                self.next();
-                break;
-            }
-            body.push(self.parse_statement()?);
-        }
+        // Function body (use shared parse_body)
+        let body = self.parse_body()?;
 
         Ok(Function {
             signature: FunctionSignature {
@@ -777,5 +645,23 @@ where
             },
             body: FunctionBody::UserDefinedBody(body),
         })
+    }
+
+    /// Parse a block body: expects '{' then parses statements until matching '}'.
+    fn parse_body(&mut self) -> ParseResult<Vec<Statement>> {
+        self.expect_token(
+            |t| matches!(t.kind, TokenKind::Punctuation(Punctuation::OpenCurly)),
+            "parse_body: expected '{'",
+        )?;
+
+        let mut stmts = Vec::new();
+        while let Some(token) = self.peek() {
+            if matches!(token.kind, TokenKind::Punctuation(Punctuation::CloseCurly)) {
+                self.next();
+                break;
+            }
+            stmts.push(self.parse_statement()?);
+        }
+        Ok(stmts)
     }
 }

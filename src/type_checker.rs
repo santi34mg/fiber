@@ -28,16 +28,42 @@ type TypeCheckerResult<T> = Result<T, TypeCheckerError>;
 
 fn load_std_functions() -> HashMap<String, FunctionSignature> {
     let mut function_signatures = HashMap::new();
-    let alloc_parameters = FunctionParameter {
-        parameter_name: "size".to_string(),
+
+    // print_int(n int) -> None (accept any type)
+    let print_param = FunctionParameter {
+        parameter_name: "n".to_string(),
         parameter_type: TypeIdentifier::Number,
     };
-    let alloc_signature = FunctionSignature {
-        name: "alloc".to_string(),
-        parameters: vec![alloc_parameters],
+    let print_signature = FunctionSignature {
+        name: "print_int".to_string(),
+        parameters: vec![print_param.clone()],
         return_type: None,
     };
-    function_signatures.insert("alloc".to_string(), alloc_signature);
+    function_signatures.insert("print_int".to_string(), print_signature);
+
+    // println(v) -> None (accept any type)
+    let println_signature = FunctionSignature {
+        name: "println".to_string(),
+        parameters: vec![print_param],
+        return_type: None,
+    };
+    function_signatures.insert("println".to_string(), println_signature);
+
+    // read_int() -> Number
+    let read_int_signature = FunctionSignature {
+        name: "read_int".to_string(),
+        parameters: vec![],
+        return_type: Some(TypeIdentifier::Number),
+    };
+    function_signatures.insert("read_int".to_string(), read_int_signature);
+
+    // read_char() -> Char
+    let read_char_signature = FunctionSignature {
+        name: "read_char".to_string(),
+        parameters: vec![],
+        return_type: Some(TypeIdentifier::Char),
+    };
+    function_signatures.insert("read_char".to_string(), read_char_signature);
 
     function_signatures
 }
@@ -144,10 +170,12 @@ impl<'a> TypeChecker<'a> {
         self.functions
             .insert(function_name.clone(), function.signature.clone());
 
-        // New scope for function body
-        let mut local_vars = self.variables.clone();
+        // Create and swap in a new local scope for function body, then restore outer scope
+    let outer_scope = std::mem::take(&mut self.variables);
+        // populate parameters into the current (now empty clone) scope using parameter names
         for parameter in &function.signature.parameters {
-            local_vars.insert(function_name.clone(), parameter.parameter_type.clone());
+            self.variables
+                .insert(parameter.parameter_name.clone(), parameter.parameter_type.clone());
         }
 
         let mut found_return = false;
@@ -156,8 +184,10 @@ impl<'a> TypeChecker<'a> {
                 if let Statement::Return(expr) = stmt {
                     found_return = true;
                     let ret_type = self.check_return(&expr)?;
-                    if let Some(expected) = return_type {
+                    if let Some(expected) = return_type.clone() {
                         if expected != ret_type {
+                            // restore outer scope before returning
+                            self.variables = outer_scope;
                             return Err(TypeCheckerError {
                                 message: format!(
                                     "Function '{}' returns {:?}, but declared as {:?}",
@@ -173,6 +203,9 @@ impl<'a> TypeChecker<'a> {
                 }
             }
         }
+
+        // restore outer scope after checking the function body
+        self.variables = outer_scope;
         // Optionally: check for missing return in non-void functions
         if function.signature.return_type.is_some() && !found_return {
             return Err(TypeCheckerError {
@@ -214,9 +247,8 @@ impl<'a> TypeChecker<'a> {
                     | Operator::LesserThan
                     | Operator::GreaterEqual
                     | Operator::LesserEqual => {
-                        if left_type != TypeIdentifier::Number
-                            && right_type != TypeIdentifier::Number
-                        {
+                        // require both sides to be numbers
+                        if left_type != TypeIdentifier::Number || right_type != TypeIdentifier::Number {
                             return Err(TypeCheckerError {
                                 message: "Comparison operators require number types".to_string(),
                             });
@@ -224,8 +256,8 @@ impl<'a> TypeChecker<'a> {
                         TypeIdentifier::Boolean
                     }
                     Operator::And | Operator::Or => {
-                        if left_type != TypeIdentifier::Boolean
-                            && right_type != TypeIdentifier::Boolean
+                        // require both sides to be booleans
+                        if left_type != TypeIdentifier::Boolean || right_type != TypeIdentifier::Boolean
                         {
                             return Err(TypeCheckerError {
                                 message: "Logical operators require boolean types".to_string(),
@@ -245,6 +277,7 @@ impl<'a> TypeChecker<'a> {
             })?,
             Expr::Number(_) => TypeIdentifier::Number,
             Expr::Boolean(_) => TypeIdentifier::Boolean,
+            Expr::Char(_) => TypeIdentifier::Char,
             Expr::Grouping(expr) => self.check_expr(expr)?,
             Expr::Call { callee, args } => self.check_call(callee, args)?,
             Expr::Unary { op, expr } => {

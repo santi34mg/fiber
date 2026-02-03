@@ -118,31 +118,28 @@ impl Interpreter {
         self.stack.last_mut().expect("No stack frame")
     }
 
-    pub fn eval(mut self, ast: Ast) -> Vec<Value> {
+    pub fn eval_ast(&mut self, ast: Ast) -> Result<(), String> {
         // Collect function declarations first
         let statements = ast.statements;
         for stmt in &statements {
             if let Statement::FunctionDeclaration(function) = stmt {
-                self.functions
+                self.interp
+                    .functions
                     .insert(function.signature.name.clone(), function.clone());
             }
         }
-        let mut results = Vec::new();
         for stmt in statements {
-            match self.eval_statement(&stmt) {
-                Ok(Some(v)) => results.push(v),
-                Ok(None) => {}
-                Err(e) => panic!("eval: {}", e),
-            }
+            self.eval_statement(&stmt)?;
         }
-        results
+        Ok(())
     }
 
-    fn eval_expr(&mut self, expr: &Expr) -> Result<Value, String> {
+    pub fn eval_expr(&mut self, expr: &Expr) -> Result<Value, String> {
         match expr {
             Expr::Number(n) => Ok(Value::Number(*n)),
             Expr::Boolean(b) => Ok(Value::Boolean(*b)),
-            Expr::Ident(id) => self.lookup_var(id),
+            Expr::Char(c) => Ok(Value::Char(*c)),
+            Expr::Ident(id) => self.interp.lookup_var(id),
             Expr::Binary { left, op, right } => {
                 let l = self.eval_expr(left)?;
                 let r = self.eval_expr(right)?;
@@ -151,7 +148,12 @@ impl Interpreter {
                         Operator::Plus => Ok(Value::Number(l + r)),
                         Operator::Minus => Ok(Value::Number(l - r)),
                         Operator::Multply => Ok(Value::Number(l * r)),
-                        Operator::Divide => Ok(Value::Number(l / r)),
+                        Operator::Divide => {
+                            if r == 0 {
+                                return Err("eval_expr: division by zero".to_string());
+                            }
+                            Ok(Value::Number(l / r))
+                        }
                         Operator::Equals => Ok(Value::Boolean(l == r)),
                         Operator::Different => Ok(Value::Boolean(l != r)),
                         Operator::GreaterThan => Ok(Value::Boolean(l > r)),
@@ -182,6 +184,7 @@ impl Interpreter {
                 };
 
                 let function = self
+                    .interp
                     .functions
                     .get(func_name)
                     .cloned()
@@ -202,7 +205,7 @@ impl Interpreter {
                 }
 
                 // Push new stack frame for function call
-                let mut frame = StackFrame {
+                let mut frame = super::value::StackFrame {
                     vars: HashMap::new(),
                 };
                 for (function_parameter, value) in function
@@ -215,28 +218,23 @@ impl Interpreter {
                         .vars
                         .insert(function_parameter.parameter_name.clone(), value);
                 }
-                self.stack.push(frame);
+                self.interp.stack.push(frame);
 
                 // Evaluate function body
-                let mut return_value = None;
+                let mut return_value: Option<Value> = None;
                 match &function.body {
                     FunctionBody::UserDefinedBody(statements) => {
                         for stmt in statements {
-                            match self.eval_statement(stmt)? {
-                                Some(val) => {
-                                    return_value = Some(val);
-                                    break;
-                                }
-                                None => {}
-                            }
+                            self.eval_statement(stmt)?;
                         }
                     }
-                    FunctionBody::NativeBody(f) => return_value = Some(f(arg_values.as_slice())),
+                    // NativeBody expected to return Option<Value>; use it directly
+                    FunctionBody::NativeBody(f) => return_value = f(arg_values.as_slice()),
                 }
 
-                self.stack.pop();
+                self.interp.stack.pop();
 
-                Ok(return_value.unwrap_or(Value::Number(69)))
+                Ok(return_value.unwrap_or(Value::None))
             }
             Expr::Unary { op, expr } => {
                 if let Operator::Not = op {
@@ -252,28 +250,22 @@ impl Interpreter {
         }
     }
 
-    fn eval_statement(&mut self, stmt: &Statement) -> Result<Option<Value>, String> {
+    pub fn eval_statement(&mut self, stmt: &Statement) -> Result<(), String> {
         match stmt {
             Statement::VarDecl(decl) => {
-                self.eval_decl(decl)?;
-                Ok(None)
+                self.interp.eval_decl(decl)?;
             }
             Statement::Assignment { identifier, expr } => {
                 let value = self.eval_expr(expr)?;
-                self.assign_var(identifier, value);
-                Ok(None)
+                self.interp.assign_var(identifier, value);
             }
             Statement::Expr(expr) => {
-                let value = self.eval_expr(expr)?;
-                Ok(Some(value))
+                let _ = self.eval_expr(expr)?;
             }
-            Statement::FunctionDeclaration(_) => Ok(None),
+            Statement::FunctionDeclaration(_) => {}
             Statement::Return(expr) => {
                 if let Some(e) = expr {
-                    let value = self.eval_expr(e)?;
-                    return Ok(Some(value));
-                } else {
-                    return Ok(None);
+                    let _ = self.eval_expr(e)?;
                 }
             }
             Statement::If {
@@ -285,54 +277,20 @@ impl Interpreter {
                 match cond_val {
                     Value::Boolean(true) => {
                         for stmt in then_branch {
-                            match self.eval_statement(stmt)? {
-                                Some(val) => return Ok(Some(val)),
-                                None => {}
-                            }
+                            self.eval_statement(stmt)?;
                         }
                     }
                     Value::Boolean(false) => {
                         if let Some(else_branch) = else_branch {
                             for stmt in else_branch {
-                                match self.eval_statement(stmt)? {
-                                    Some(val) => return Ok(Some(val)),
-                                    None => {}
-                                }
+                                self.eval_statement(stmt)?;
                             }
                         }
                     }
-                    _ => return Err("if condition does not evaluate to a boolean".to_string()),
+                    _ => return Ok(()),
                 }
-                Ok(None)
             }
         }
-    }
-
-    fn eval_decl(&mut self, decl: &VarDecl) -> Result<(), String> {
-        let decl_val = self.eval_expr(&decl.expr)?;
-        self.current_frame_mut()
-            .vars
-            .insert(decl.identifier.clone(), decl_val);
         Ok(())
-    }
-
-    fn lookup_var(&self, id: &str) -> Result<Value, String> {
-        for frame in self.stack.iter().rev() {
-            if let Some(val) = frame.vars.get(id) {
-                return Ok(val.clone());
-            }
-        }
-        Err(format!("eval_expr: variable '{}' not found", id))
-    }
-
-    fn assign_var(&mut self, id: &str, value: Value) {
-        for frame in self.stack.iter_mut().rev() {
-            if frame.vars.contains_key(id) {
-                frame.vars.insert(id.to_string(), value);
-                return;
-            }
-        }
-        // If not found, assign in the current frame (like implicit declaration)
-        self.current_frame_mut().vars.insert(id.to_string(), value);
     }
 }

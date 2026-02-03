@@ -13,7 +13,7 @@ impl<'input> Lexer<'input> {
             input,
             position: 0,
             line: 1,
-            column: 0,
+            column: 1,
         }
     }
 
@@ -171,6 +171,19 @@ impl<'input> Lexer<'input> {
                 self.bump();
                 Some(TokenKind::Punctuation(Punctuation::Colon))
             }
+            '\'' => {
+                self.bump(); // consume opening quote
+                let ch = self.bump()?; // get the character
+                if self.bump()? != '\'' {
+                    // expect closing quote
+                    return Some(Token::new(
+                        TokenKind::Unkown(ch),
+                        start_line,
+                        start_col,
+                    ));
+                }
+                Some(TokenKind::CharLiteral(ch))
+            }
             c if c.is_ascii_digit() => Some(self.lex_number()),
             c if c.is_alphabetic() => Some(self.lex_identifier_or_keyword()),
             c => {
@@ -202,6 +215,7 @@ impl<'input> Lexer<'input> {
             "return" => TokenKind::Keyword(Keyword::Return),
             "int" => TokenKind::TypeIdentifier(TypeIdentifier::Number),
             "bool" => TokenKind::TypeIdentifier(TypeIdentifier::Boolean),
+            "char" => TokenKind::TypeIdentifier(TypeIdentifier::Char),
             "true" => TokenKind::BooleanLiteral(true),
             "false" => TokenKind::BooleanLiteral(false),
             _ => TokenKind::Identifier(name.to_string()),
