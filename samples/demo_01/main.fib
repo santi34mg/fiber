@@ -1,0 +1,749 @@
+// ============================================================================
+// Fiber Language Complete Feature Demo
+// ============================================================================
+// This program demonstrates all features of the Fiber language as specified
+// in the language specification document.
+
+// ----------------------------------------------------------------------------
+// SECTION 1: Comments
+// ----------------------------------------------------------------------------
+// This is a single-line comment
+
+// ----------------------------------------------------------------------------
+// SECTION 2: Modules
+// ----------------------------------------------------------------------------
+
+// Public module declaration (block form)
+public module math {
+    function add(a int, b int) int {
+        return a + b;
+    }
+    
+    function subtract(a int, b int) int {
+        return a - b;
+    }
+}
+
+// Private module declaration (default visibility)
+module helpers {
+    function double(x int) int {
+        return x * 2;
+    }
+}
+
+// Module member declaration using qualified identifier
+function math:multiply(a int, b int) int {
+    return a * b;
+}
+
+function math:divide(a int, b int) int {
+    if b == 0 {
+        panic
+    }
+    return a / b;
+}
+
+// ----------------------------------------------------------------------------
+// SECTION 3: Literals
+// ----------------------------------------------------------------------------
+
+function demo_literals() unit {
+    // Integer literals
+    let decimal int = 42;
+    let with_underscores int = 1_000_000;
+    let hexadecimal int = 0xFF;
+    let hex_with_underscores int = 0x00_FF_00;
+    let binary int = 0b1010_1100;
+    let octal int = 0o755;
+    
+    // Boolean literals
+    let is_true bool = true;
+    let is_false bool = false;
+    
+    // Character literals
+    let letter char = 'a';
+    let newline char = '\n';
+    let tab char = '\t';
+    let backslash char = '\\';
+    let single_quote char = '\'';
+    let null_char char = '\0';
+    let hex_byte char = '\x41';
+    let unicode char = '\u{03B1}';  // Greek letter alpha
+    
+    // String literals
+    let greeting string = "hello, world";
+    let multiline string = "line one\nline two";
+    let unicode_str string = "unicode: \u{1F600}";
+    
+    // Tuple literals
+    let point (int * int) = (1, 2);
+    let person_tuple (string * int * bool) = ("name", 25, true);
+    let nested_tuple (int * (int * int)) = (1, (2, 3));
+    
+    // Array literals
+    let numbers []int = [1, 2, 3, 4, 5];
+    let strings []string = ["a", "b", "c"];
+    let fixed_array [3]int = [10, 20, 30];
+    
+    // Struct literals
+    let coords { x = 10, y = 20 };
+    let record { name = "Alice", age = 30, active = true };
+    
+    // Unit literal
+    let nothing unit = ();
+}
+
+// ----------------------------------------------------------------------------
+// SECTION 4: Named Types
+// ----------------------------------------------------------------------------
+
+// Simple named types
+type Point = (int * int);
+type Transform = (string) -> int;
+
+// Named types with labeled members
+type Point2D = ('x int * 'y int);
+type Person = ('name string * 'age int * 'active bool);
+type Rectangle = ('width int * 'height int);
+
+// Named types for sum types (algebraic data types) - labeled variants required
+type Option = 'None + 'Some int;
+type Either = 'Left string + 'Right int;
+type Status = 'Pending + 'Running + 'Completed + 'Failed string;
+
+// Result types for error handling
+type DivideResult = 'Ok int + 'Err DivisionByZeroError;
+type SqrtResult = 'Ok int + 'Err NegativeValueError;
+
+// ----------------------------------------------------------------------------
+// SECTION 5: Contracts
+// ----------------------------------------------------------------------------
+
+// Contract declaration
+contract Shape {
+    function area(self) int;
+    function perimeter(self) int;
+}
+
+contract Comparable {
+    function compare(self, other Self) int;
+}
+
+contract Serializable {
+    function to_string(self) string;
+}
+
+// Named type with contract implementation
+type Square = (
+    'side int
+    ;
+    Shape {
+        function area(self) int {
+            return self.side * self.side;
+        }
+        function perimeter(self) int {
+            return self.side * 4;
+        }
+    }
+    Serializable {
+        function to_string(self) string {
+            return "Square";
+        }
+    }
+)
+
+type Circle = (
+    'radius int
+    ;
+    Shape {
+        function area(self) int {
+            // Approximation: pi * r^2 ≈ 3 * r^2
+            return 3 * self.radius * self.radius;
+        }
+        function perimeter(self) int {
+            // Approximation: 2 * pi * r ≈ 6 * r
+            return 6 * self.radius;
+        }
+    }
+)
+
+// ----------------------------------------------------------------------------
+// SECTION 5b: Error Contract and Custom Errors
+// ----------------------------------------------------------------------------
+
+// The Error contract (would be defined by the standard library/language)
+contract Error {
+    function get_error_id(self) int;
+    function get_error_message(self) string;
+}
+
+// Custom error type that signs the Error contract
+type DivisionByZeroError = (
+    'dividend int
+    ;
+    Error {
+        function get_error_id(self) int {
+            return 1;
+        }
+        function get_error_message(self) string {
+            return "cannot divide by zero";
+        }
+    }
+)
+
+type NegativeValueError = (
+    'value int *
+    'context string
+    ;
+    Error {
+        function get_error_id(self) int {
+            return 2;
+        }
+        function get_error_message(self) string {
+            return "negative value not allowed in " + self.context + ": " + self.value;
+        }
+    }
+)
+
+type FileNotFoundError = (
+    'path string
+    ;
+    Error {
+        function get_error_id(self) int {
+            return 3;
+        }
+        function get_error_message(self) string {
+            return "file not found: " + self.path;
+        }
+    }
+)
+
+// Function that accepts any error (contract-typed parameter)
+function log_error(err Error) unit {
+    print("Error [" + err.get_error_id() + "]: " + err.get_error_message());
+}
+
+// Function with contract-typed parameter (monomorphization)
+function calculate_area(shape Shape) int {
+    return shape.area();
+}
+
+function get_perimeter(shape Shape) int {
+    return shape.perimeter();
+}
+
+// ----------------------------------------------------------------------------
+// SECTION 6: Variables and Assignment
+// ----------------------------------------------------------------------------
+
+function demo_variables() unit {
+    // Variable declaration without initializer
+    let uninitialized int;
+    
+    // Variable declaration with initializer
+    let initialized int = 42;
+    
+    // Variable assignment
+    uninitialized = 100;
+    initialized = initialized + 1;
+    
+    // Type inference would work here if supported
+    let point Point2D = { x = 10, y = 20 };
+    
+    // Reassignment
+    point = { x = 30, y = 40 };
+}
+
+// ----------------------------------------------------------------------------
+// SECTION 7: Operators
+// ----------------------------------------------------------------------------
+
+function demo_operators() unit {
+    let a int = 10;
+    let b int = 3;
+    
+    // Arithmetic operators
+    let sum int = a + b;        // Addition: 13
+    let diff int = a - b;       // Subtraction: 7
+    let prod int = a * b;       // Multiplication: 30
+    let quot int = a / b;       // Integer division: 3
+    let rem int = a % b;        // Modulo: 1
+    let neg int = -a;           // Negation: -10
+    
+    // Increment and decrement statements
+    let i int = 5;
+    i++;                        // i = 6
+    i--;                        // i = 5
+    
+    // Compound assignment operators
+    let c int = 10;
+    c += 5;                     // c = 15
+    c -= 3;                     // c = 12
+    c *= 2;                     // c = 24
+    c /= 4;                     // c = 6
+    c %= 4;                     // c = 2
+    
+    // Comparison operators
+    let eq bool = a == b;       // false
+    let neq bool = a != b;      // true
+    let lt bool = a < b;        // false
+    let gt bool = a > b;        // true
+    let lte bool = a <= b;      // false
+    let gte bool = a >= b;      // true
+    
+    // Logical operators
+    let and_result bool = true && false;    // false
+    let or_result bool = true || false;     // true
+    let not_result bool = !true;            // false
+    
+    // Bitwise operators
+    let bit_and int = 0b1100 & 0b1010;      // 0b1000 = 8
+    let bit_or int = 0b1100 | 0b1010;       // 0b1110 = 14
+    let bit_xor int = 0b1100 ^ 0b1010;      // 0b0110 = 6
+    let bit_not int = ~0b1100;              // Bitwise NOT
+    let left_shift int = 1 << 4;            // 16
+    let right_shift int = 16 >> 2;          // 4
+}
+
+// ----------------------------------------------------------------------------
+// SECTION 8: Structural vs Strict Equality
+// ----------------------------------------------------------------------------
+
+type Age = int;
+type Year = int;
+
+function demo_equality() unit {
+    let x int = 25;
+    let y Age = 25;
+    let z Year = 25;
+    
+    // Structural equality (compares values)
+    let struct_eq1 bool = x == y;   // true (same underlying value)
+    let struct_eq2 bool = y == z;   // true (same underlying value)
+    
+    // Strict type equality (requires identical types)
+    let strict_eq1 bool = y === y;  // true (same type, same value)
+    let strict_eq2 bool = y === z;  // false (Age !== Year)
+    let strict_eq3 bool = y === x;  // false (Age !== int)
+    
+    // Product type equality
+    let p1 (string * int) = ("J", 20);
+    let p2 (string * Age) = ("J", 20);
+    
+    let tuple_struct_eq bool = p1 == p2;    // true (structurally equivalent)
+    let tuple_strict_eq bool = p1 === p2;   // false (int !== Age)
+}
+
+// ----------------------------------------------------------------------------
+// SECTION 9: Control Flow
+// ----------------------------------------------------------------------------
+
+function demo_conditionals(x int) string {
+    // Simple if statement
+    if x > 0 {
+        print("positive");
+    }
+    
+    // If-else statement
+    if x > 0 {
+        print("positive");
+    } else {
+        print("non-positive");
+    }
+    
+    // If-else if chain
+    if x > 0 {
+        return "positive";
+    } else if x < 0 {
+        return "negative";
+    } else {
+        return "zero";
+    }
+}
+
+function demo_if_expression(condition bool) int {
+    // If expression (requires else branch)
+    let result int = if condition { 1 } else { 2 };
+    return result;
+}
+
+function demo_loops() unit {
+    // Indefinite loop with break
+    let counter int = 0;
+    for {
+        if counter >= 5 {
+            break;
+        }
+        print(counter);
+        counter++;
+    }
+    
+    // Condition-controlled loop
+    let i int = 0;
+    for i < 10 {
+        print(i);
+        i++;
+    }
+    
+    // C-style loop
+    for let j int = 0; j < 10; j++ {
+        print(j);
+    }
+    
+    // Loop with continue
+    for let k int = 0; k < 10; k++ {
+        if k % 2 == 0 {
+            continue;
+        }
+        print(k);  // Prints odd numbers only
+    }
+}
+
+// ----------------------------------------------------------------------------
+// SECTION 10: Pattern Matching
+// ----------------------------------------------------------------------------
+
+function demo_pattern_matching(value Option) int {
+    // Match expression on sum type with labeled variants
+    let result int = match value {
+    | 'None -> 0
+    | 'Some x -> x
+    };
+    return result;
+}
+
+function demo_pattern_matching_either(value Either) string {
+    match value {
+    | 'Left msg -> msg
+    | 'Right num -> "number"
+    }
+}
+
+function classify_number(x int) string {
+    // Pattern matching with guards
+    match x {
+    | n when n < 0 -> "negative"
+    | n when n > 0 -> "positive"
+    | _ -> "zero"
+    }
+}
+
+function demo_tuple_pattern() unit {
+    let point (int * int) = (10, 20);
+    
+    // Tuple pattern matching
+    match point {
+    | (0, 0) -> print("origin")
+    | (x, 0) -> print("on x-axis")
+    | (0, y) -> print("on y-axis")
+    | (x, y) -> print("somewhere else")
+    }
+}
+
+function demo_struct_pattern() unit {
+    let person Person = { name = "Alice", age = 30, active = true };
+    
+    // Struct pattern matching
+    match person {
+    | { name = n, age = a, active = true } -> print("active person")
+    | { name = n, age = a, active = false } -> print("inactive person")
+    }
+}
+
+// ----------------------------------------------------------------------------
+// SECTION 11: Destructuring
+// ----------------------------------------------------------------------------
+
+function demo_destructuring() unit {
+    // Tuple positional destructuring
+    let point (int * int) = (10, 20);
+    let x int = point.0;
+    let y int = point.1;
+    
+    // Tuple destructuring assignment
+    let (a int, b int) = point;
+    
+    // Type inference in destructuring
+    let (c, d) = point;
+    
+    // Labeled product (struct) destructuring
+    let person Person = { name = "John", age = 25, active = true };
+    let name string = person.name;
+    let age int = person.age;
+    
+    // Array index access
+    let arr []int = [1, 2, 3, 4, 5];
+    let first int = arr.0;
+    let third int = arr.2;
+}
+
+// ----------------------------------------------------------------------------
+// SECTION 12: Block Expressions
+// ----------------------------------------------------------------------------
+
+function demo_block_expressions() int {
+    // Block expression that produces a value
+    let result int = {
+        let temp int = 10;
+        let doubled int = temp * 2;
+        doubled + 5  // This is the value of the block
+    };
+    
+    return result;  // returns 25
+}
+
+// ----------------------------------------------------------------------------
+// SECTION 13: Functions
+// ----------------------------------------------------------------------------
+
+// Basic function declaration
+function add(a int, b int) int {
+    return a + b;
+}
+
+// Function without return type (returns unit)
+function greet(name string) {
+    print("Hello, " + name);
+}
+
+// Forward declaration
+function forward_declared(x int) int;
+
+// Forward declaration implementation
+function forward_declared(x int) int {
+    return x * 2;
+}
+
+// Recursive function
+function factorial(n int) int {
+    if n <= 1 {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+// Mutual recursion
+function is_even(n int) bool {
+    if n == 0 { return true; }
+    return is_odd(n - 1);
+}
+
+function is_odd(n int) bool {
+    if n == 0 { return false; }
+    return is_even(n - 1);
+}
+
+// Function returning function type
+function make_adder(n int) (int) -> int {
+    return func(x int) int { return x + n; };
+}
+
+let add5 (int) -> int = make_adder(5);
+let res int = add5(10);  // res = 15
+
+// Function accepting function as parameter
+function apply_twice(f (int) -> int, x int) int {
+    return f(f(x));
+}
+
+function demo_functions() unit {
+    // Basic function call
+    let sum int = add(3, 4);
+    
+    // Calling function from module
+    let product int = math:multiply(5, 6);
+    let quotient int = math:divide(20, 4);
+    
+    // Anonymous function (lambda)
+    let double (int) -> int = func(x int) int { return x * 2; };
+    let doubled int = double(5);
+    
+    // Closure
+    let add_five (int) -> int = make_adder(5);
+    let result int = add_five(10);  // result = 15
+    
+    // Higher-order function
+    let quadruple int = apply_twice(double, 3);  // 3 -> 6 -> 12
+    
+    // Recursion
+    let fact int = factorial(5);  // 120
+    
+    // Mutual recursion
+    let even bool = is_even(4);   // true
+    let odd bool = is_odd(3);     // true
+}
+
+// ----------------------------------------------------------------------------
+// SECTION 14: Error Handling with Error Contract
+// ----------------------------------------------------------------------------
+
+// Function returning a named result type with labeled variants
+function safe_divide(a int, b int) DivideResult {
+    if b == 0 {
+        return 'Err DivisionByZeroError { dividend = a };
+    }
+    return 'Ok (a / b);
+}
+
+// Function returning a different result type
+function safe_sqrt(x int) SqrtResult {
+    if x < 0 {
+        return 'Err NegativeValueError { value = x, context = "sqrt" };
+    }
+    // Simple integer square root approximation
+    let result int = 0;
+    for result * result <= x {
+        result++;
+    }
+    return 'Ok (result - 1);
+}
+
+function demo_error_handling() unit {
+    // Handling DivisionByZeroError with labeled variants
+    let div_result DivideResult = safe_divide(10, 0);
+    
+    match div_result {
+    | 'Err error -> {
+        // Using the Error contract methods
+        print("ID: " + error.get_error_id());
+        print("Message: " + error.get_error_message());
+        // Can also use log_error since it accepts any Error
+        log_error(error);
+    }
+    | 'Ok value -> print("Result: " + value)
+    }
+    
+    // Handling NegativeValueError
+    let sqrt_result SqrtResult = safe_sqrt(-5);
+    
+    match sqrt_result {
+    | 'Err error -> log_error(error)  // Works because NegativeValueError signs Error
+    | 'Ok value -> print("Square root: " + value)
+    }
+    
+    // Successful operations
+    let ok_div DivideResult = safe_divide(20, 4);
+    match ok_div {
+    | 'Err error -> log_error(error)
+    | 'Ok value -> print("20 / 4 = " + value)
+    }
+    
+    let ok_sqrt SqrtResult = safe_sqrt(16);
+    match ok_sqrt {
+    | 'Err error -> log_error(error)
+    | 'Ok value -> print("sqrt(16) = " + value)
+    }
+}
+
+// Panic is still available for unrecoverable errors
+function example_panic(x int) int {
+    if x < 0 {
+        print("FATAL: negative value not allowed");
+        panic
+    }
+    return x;
+}
+
+// ----------------------------------------------------------------------------
+// SECTION 15: Contract Usage with Monomorphization
+// ----------------------------------------------------------------------------
+
+function demo_contracts() unit {
+    let square Square = { side = 5 };
+    let circle Circle = { radius = 3 };
+    
+    // Monomorphization: compiler generates specialized versions
+    let square_area int = calculate_area(square);   // Uses calculate_area_Square
+    let circle_area int = calculate_area(circle);   // Uses calculate_area_Circle
+    
+    let square_perim int = get_perimeter(square);
+    let circle_perim int = get_perimeter(circle);
+    
+    // Using method directly
+    let area int = square.area();
+    let perim int = square.perimeter();
+    let str string = square.to_string();
+}
+
+// ----------------------------------------------------------------------------
+// SECTION 16: Complex Type Compositions
+// ----------------------------------------------------------------------------
+
+// Complex sum type with labeled variants for handler results
+type HandlerResult = 'Boolean bool + 'Integer int;
+type ComplexHandler = ((int * string) -> HandlerResult);
+
+// Nested product types
+type NestedProduct = (Point2D * Person);
+
+// Array of named types
+type PointArray = []Point2D;
+
+// Function type with product parameter
+type BinaryOp = ((int * int)) -> int;
+
+function demo_complex_types() unit {
+    // Complex handler returning labeled variants
+    let handler ComplexHandler = func(input (int * string)) HandlerResult {
+        if input.0 > 0 {
+            return 'Boolean true;
+        }
+        return 'Integer input.0;
+    };
+    
+    // Nested product
+    let nested NestedProduct = (
+        { x = 10, y = 20 },
+        { name = "Alice", age = 30, active = true }
+    );
+    
+    // Array of points
+    let points PointArray = [
+        { x = 0, y = 0 },
+        { x = 1, y = 1 },
+        { x = 2, y = 4 }
+    ];
+    
+    // Accessing nested structure
+    let point Point2D = nested.0;
+    let person Person = nested.1;
+    let first_point Point2D = points.0;
+}
+
+// ----------------------------------------------------------------------------
+// SECTION 17: Main Entry Point
+// ----------------------------------------------------------------------------
+
+function main() unit {
+    print("=== Fiber Language Feature Demo ===\n");
+    
+    // Demonstrate all features
+    demo_literals();
+    demo_variables();
+    demo_operators();
+    demo_equality();
+    demo_loops();
+    demo_destructuring();
+    demo_functions();
+    demo_contracts();
+    demo_complex_types();
+    demo_error_handling();
+    
+    // Pattern matching examples with labeled variants
+    let opt Option = 'Some 42;
+    let value int = demo_pattern_matching(opt);
+    print(value);
+    
+    let classification string = classify_number(-5);
+    print(classification);
+    
+    // Block expression
+    let block_result int = demo_block_expressions();
+    print(block_result);
+    
+    // Conditional expression
+    let cond_result int = demo_if_expression(true);
+    print(cond_result);
+    
+    print("\n=== Demo Complete ===");
+}

@@ -1,0 +1,95 @@
+/* Custom CSS for Markdown PDF export - A4 optimized */
+
+/* Automatic page breaks before major sections */
+h1 {
+  page-break-before: always;
+}
+
+h1:first-of-type {
+  page-break-before: avoid;
+}
+
+/* Prevent awkward breaks */
+h2,
+h3,
+h4 {
+  page-break-after: avoid;
+}
+
+pre,
+code,
+table,
+img,
+blockquote {
+  page-break-inside: avoid;
+}
+
+/* Keep headings with their content */
+h2 + p,
+h2 + pre,
+h2 + table,
+h3 + p,
+h3 + pre,
+h3 + table,
+h4 + p,
+h4 + pre,
+h4 + table {
+  page-break-before: avoid;
+}
+
+/* Prevent orphan/widow lines */
+p {
+  orphans: 3;
+  widows: 3;
+}
+
+/* Table styling for better page breaks */
+table {
+  page-break-inside: avoid;
+}
+
+thead {
+  display: table-header-group;
+}
+
+tr {
+  page-break-inside: avoid;
+}
+
+/* Code blocks */
+pre {
+  page-break-inside: avoid;
+  max-height: none;
+}
+
+/* Manual page break class */
+.page {
+  page-break-after: always;
+}
+
+/* Better spacing for print */
+@media print {
+  body {
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+
+  h1 {
+    font-size: 24pt;
+    margin-top: 0;
+  }
+  h2 {
+    font-size: 18pt;
+  }
+  h3 {
+    font-size: 14pt;
+  }
+  h4 {
+    font-size: 12pt;
+  }
+
+  /* Ensure TOC doesn't break badly */
+  ul ul {
+    page-break-before: avoid;
+  }
+}

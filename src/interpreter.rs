@@ -23,30 +23,81 @@ pub struct Interpreter {
     functions: HashMap<String, Function>,
 }
 
+pub struct FunctionBuilder {
+    name: String,
+    parameters: Vec<FunctionParameter>,
+    return_type: Option<TypeIdentifier>,
+    body: Option<FunctionBody>,
+}
+
+impl FunctionBuilder {
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            parameters: Vec::new(),
+            return_type: None,
+            body: None,
+        }
+    }
+
+    pub fn param(mut self, name: &str, ty: TypeIdentifier) -> Self {
+        self.parameters.push(FunctionParameter {
+            parameter_name: name.to_string(),
+            parameter_type: ty,
+        });
+        self
+    }
+
+    pub fn returns(mut self, ty: TypeIdentifier) -> Self {
+        self.return_type = Some(ty);
+        self
+    }
+
+    pub fn returns_none(mut self) -> Self {
+        self.return_type = None;
+        self
+    }
+
+    pub fn native<F>(mut self, func: F) -> Self
+    where
+        F: Fn(&[Value]) -> Value + Send + Sync + 'static,
+    {
+        self.body = Some(FunctionBody::NativeBody(Arc::new(func)));
+        self
+    }
+
+    pub fn user_defined(mut self, stmts: Vec<Statement>) -> Self {
+        self.body = Some(FunctionBody::UserDefinedBody(stmts));
+        self
+    }
+
+    pub fn build(self) -> Function {
+        let signature = FunctionSignature {
+            name: self.name,
+            parameters: self.parameters,
+            return_type: self.return_type,
+        };
+        let body = self
+            .body
+            .expect("Function must have a body before calling build()");
+        Function { signature, body }
+    }
+}
+
 fn load_std_functions() -> HashMap<String, Function> {
     let mut std_functions = HashMap::new();
-    let alloc_parameters = FunctionParameter {
-        parameter_name: "size".to_string(),
-        parameter_type: TypeIdentifier::Number,
-    };
-    let alloc_signature = FunctionSignature {
-        name: "alloc".to_string(),
-        parameters: vec![alloc_parameters],
-        return_type: None,
-    };
-    let alloc_body = FunctionBody::NativeBody(Arc::new(|args| {
-        if let Some(Value::Number(size)) = args.get(0) {
-            // demo
-            println!("Allocating {} bytes", size);
-            Value::Number(*size)
-        } else {
-            panic!("alloc: expected an integer size argument");
-        }
-    }));
-    let alloc = Function {
-        signature: alloc_signature,
-        body: alloc_body,
-    };
+    let alloc = FunctionBuilder::new("alloc")
+        .param("size", TypeIdentifier::Number)
+        .returns(TypeIdentifier::Number)
+        .native(|args| {
+            if let Some(Value::Number(size)) = args.get(0) {
+                println!("Allocating {} bytes", size);
+                Value::Number(*size)
+            } else {
+                panic!("alloc: expected a number argument");
+            }
+        })
+        .build();
     std_functions.insert("alloc".to_string(), alloc);
 
     std_functions
