@@ -1,23 +1,22 @@
 use crate::token::Operator;
+use crate::token::literal::Literal;
 
 #[derive(Debug, Clone)]
-pub enum Expr {
+pub enum Expression {
     Binary {
-        left: Box<Expr>,
-        op: Operator,
-        right: Box<Expr>,
+        left: Box<Expression>,
+        operator: Operator,
+        right: Box<Expression>,
     },
     Unary {
-        op: Operator,
-        expr: Box<Expr>,
+        operator: Operator,
+        expression: Box<Expression>,
     },
-    Number(i32),
-    Boolean(bool),
-    Char(char),
+    Literal(Literal),
     Ident(String),
-    Grouping(Box<Expr>),
+    Grouping(Box<Expression>),
     Call {
-        callee: Box<Expr>,
-        args: Vec<Expr>,
+        callee: Box<Expression>,
+        args: Vec<Expression>,
     },
 }

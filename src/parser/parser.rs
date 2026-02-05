@@ -1,9 +1,9 @@
-use std::iter::Peekable;
 use std::fmt;
+use std::iter::Peekable;
 
 use crate::parser::function::{FunctionBody, FunctionParameter, FunctionSignature};
-use crate::parser::{Ast, Expr, Function, Statement, VarDecl};
-use crate::token::{Keyword, Operator, Punctuation, Token, TokenKind};
+use crate::parser::{Ast, Expression, Function, Statement, VariableDeclaration};
+use crate::token::{Keyword, Literal, Operator, Punctuation, Token, TokenKind};
 
 #[derive(Debug)]
 pub struct ParseError {
@@ -119,34 +119,34 @@ where
             match &token.kind {
                 TokenKind::Keyword(Keyword::If) => {
                     self.next(); // consume 'if'
-                        let condition = self.parse_expression()?;
-                        // Parse then-branch using shared parse_body
-                        let then_branch = self.parse_body()?;
-                        // Check for optional else
-                        let else_branch = if let Some(token) = self.peek() {
-                            if matches!(token.kind, TokenKind::Keyword(Keyword::Else)) {
-                                self.next(); // consume 'else'
-                                let else_stmts = self.parse_body()?;
-                                Some(else_stmts)
-                            } else {
-                                None
-                            }
+                    let condition = self.parse_expression()?;
+                    // Parse then-branch using shared parse_body
+                    let then_branch = self.parse_body()?;
+                    // Check for optional else
+                    let else_branch = if let Some(token) = self.peek() {
+                        if matches!(token.kind, TokenKind::Keyword(Keyword::Else)) {
+                            self.next(); // consume 'else'
+                            let else_stmts = self.parse_body()?;
+                            Some(else_stmts)
                         } else {
                             None
-                        };
-                        Statement::If {
-                            condition,
-                            then_branch,
-                            else_branch,
                         }
+                    } else {
+                        None
+                    };
+                    Statement::If {
+                        condition,
+                        then_branch,
+                        else_branch,
+                    }
                 }
-                TokenKind::Keyword(Keyword::Func) => {
+                TokenKind::Keyword(Keyword::Function) => {
                     let user_function = self.parse_function_declaration()?;
                     Statement::FunctionDeclaration(user_function)
                 }
-                TokenKind::Keyword(Keyword::Var) => {
+                TokenKind::Keyword(Keyword::Let) => {
                     let stmt = self.parse_var_decl()?;
-                    Statement::VarDecl(stmt)
+                    Statement::VariableDeclaration(stmt)
                 }
                 TokenKind::Keyword(Keyword::Return) => {
                     self.next(); // consume 'return'
@@ -178,38 +178,39 @@ where
                     } else if self.is_increment_decrement()? {
                         let (identifier, op) = self.parse_increment_decrement()?;
                         // Represent as assignment: x++ => x = x + 1, x-- => x = x - 1
-                        let expr = Expr::Binary {
-                            left: Box::new(Expr::Ident(identifier.clone())),
-                            op,
-                            right: Box::new(Expr::Number(1)),
+                        let expr = Expression::Binary {
+                            left: Box::new(Expression::Ident(identifier.clone())),
+                            operator: op,
+                            right: Box::new(Expression::Literal(Literal::Integer(1))),
                         };
                         Statement::Assignment { identifier, expr }
                     } else {
                         let expr = self.parse_expression()?;
-                        Statement::Expr(expr)
+                        Statement::Expression(expr)
                     }
                 }
-                TokenKind::Keyword(Keyword::While) => {
-                    // For simplicity, treat while as an expression statement for now
-                    self.next(); // consume 'while'
+                TokenKind::Keyword(Keyword::For) => {
+                    // For simplicity, treat for as an expression statement for now
+                    self.next(); // consume 'for'
                     let condition = self.parse_expression()?;
                     // Use shared parse_body to consume the block
                     let _body = self.parse_body()?;
                     // Represent while as a function call for now (to be implemented properly later)
-                    let while_expr = Expr::Call {
-                        callee: Box::new(Expr::Ident("while".to_string())),
+                    let while_expr = Expression::Call {
+                        callee: Box::new(Expression::Ident("while".to_string())),
                         args: vec![condition], // Incomplete representation
                     };
-                    Statement::Expr(while_expr)
+                    Statement::Expression(while_expr)
+                }
+                TokenKind::Literal(_) => {
+                    let expr = self.parse_expression()?;
+                    Statement::Expression(expr)
                 }
                 TokenKind::TypeIdentifier(_)
                 | TokenKind::Keyword(Keyword::Else)
-                | TokenKind::NumberLiteral(_)
-                | TokenKind::BooleanLiteral(_)
-                | TokenKind::CharLiteral(_)
                 | TokenKind::Operator(_)
                 | TokenKind::Punctuation(_)
-                | TokenKind::Unkown(_) => {
+                | TokenKind::Unknown(_) => {
                     let t = token.clone();
                     return Err(self.error("unsupported", t.line, t.column));
                 }
@@ -256,7 +257,7 @@ where
     }
 
     /// Helper to parse '= expr'
-    fn parse_initializer(&mut self) -> ParseResult<Expr> {
+    fn parse_initializer(&mut self) -> ParseResult<Expression> {
         self.expect_token(
             |t| matches!(t.kind, TokenKind::Operator(Operator::Assign)),
             "expected '='",
@@ -265,7 +266,7 @@ where
     }
 
     /// Parses an assignment statement: identifier '=' expression
-    fn parse_assignment(&mut self) -> ParseResult<(String, Expr)> {
+    fn parse_assignment(&mut self) -> ParseResult<(String, Expression)> {
         let ident_token = self.expect_token(
             |t| matches!(t.kind, TokenKind::Identifier(_)),
             "parse_assignment: expected identifier",
@@ -308,9 +309,9 @@ where
         Ok((identifier, op))
     }
 
-    fn parse_var_decl(&mut self) -> ParseResult<VarDecl> {
+    fn parse_var_decl(&mut self) -> ParseResult<VariableDeclaration> {
         self.expect_token(
-            |t| matches!(t.kind, TokenKind::Keyword(Keyword::Var)),
+            |t| matches!(t.kind, TokenKind::Keyword(Keyword::Let)),
             "parse_var_decl: expected 'var' keyword",
         )?;
 
@@ -335,23 +336,23 @@ where
         };
 
         let expr = self.parse_initializer()?;
-        Ok(VarDecl::new(ident, var_type, expr))
+        Ok(VariableDeclaration::new(ident, var_type, expr))
     }
 
-    fn parse_expression(&mut self) -> ParseResult<Expr> {
+    fn parse_expression(&mut self) -> ParseResult<Expression> {
         self.parse_logical_or()
     }
 
-    fn parse_logical_or(&mut self) -> ParseResult<Expr> {
+    fn parse_logical_or(&mut self) -> ParseResult<Expression> {
         let mut expr = self.parse_logical_and()?;
         while let Some(token) = self.peek() {
             match &token.kind {
                 TokenKind::Operator(Operator::Or) => {
                     self.next();
                     let right = Box::new(self.parse_logical_and()?);
-                    expr = Expr::Binary {
+                    expr = Expression::Binary {
                         left: Box::new(expr),
-                        op: Operator::Or,
+                        operator: Operator::Or,
                         right,
                     };
                 }
@@ -361,16 +362,16 @@ where
         Ok(expr)
     }
 
-    fn parse_logical_and(&mut self) -> ParseResult<Expr> {
+    fn parse_logical_and(&mut self) -> ParseResult<Expression> {
         let mut expr = self.parse_equality()?;
         while let Some(token) = self.peek() {
             match &token.kind {
                 TokenKind::Operator(Operator::And) => {
                     self.next();
                     let right = Box::new(self.parse_equality()?);
-                    expr = Expr::Binary {
+                    expr = Expression::Binary {
                         left: Box::new(expr),
-                        op: Operator::And,
+                        operator: Operator::And,
                         right,
                     };
                 }
@@ -381,7 +382,7 @@ where
     }
 
     /// Parse equality and comparison expressions (==, !=, >, <, >=, <=)
-    fn parse_equality(&mut self) -> ParseResult<Expr> {
+    fn parse_equality(&mut self) -> ParseResult<Expression> {
         let mut expr = self.parse_comparison()?;
 
         while let Some(token) = self.peek() {
@@ -390,9 +391,9 @@ where
                     let op = *op;
                     self.next();
                     let right = Box::new(self.parse_comparison()?);
-                    expr = Expr::Binary {
+                    expr = Expression::Binary {
                         left: Box::new(expr),
-                        op,
+                        operator: op,
                         right,
                     };
                 }
@@ -402,7 +403,7 @@ where
         Ok(expr)
     }
 
-    fn parse_comparison(&mut self) -> ParseResult<Expr> {
+    fn parse_comparison(&mut self) -> ParseResult<Expression> {
         let mut expr = self.parse_additive()?;
 
         while let Some(token) = self.peek() {
@@ -416,9 +417,9 @@ where
                     let op = *op;
                     self.next();
                     let right = Box::new(self.parse_additive()?);
-                    expr = Expr::Binary {
+                    expr = Expression::Binary {
                         left: Box::new(expr),
-                        op,
+                        operator: op,
                         right,
                     };
                 }
@@ -428,7 +429,7 @@ where
         Ok(expr)
     }
 
-    fn parse_additive(&mut self) -> ParseResult<Expr> {
+    fn parse_additive(&mut self) -> ParseResult<Expression> {
         let mut expr = self.parse_term()?;
 
         while let Some(token) = self.peek() {
@@ -437,9 +438,9 @@ where
                     let op = *op;
                     self.next();
                     let right = Box::new(self.parse_term()?);
-                    expr = Expr::Binary {
+                    expr = Expression::Binary {
                         left: Box::new(expr),
-                        op,
+                        operator: op,
                         right,
                     };
                 }
@@ -449,18 +450,18 @@ where
         Ok(expr)
     }
 
-    fn parse_term(&mut self) -> ParseResult<Expr> {
+    fn parse_term(&mut self) -> ParseResult<Expression> {
         let mut expr = self.parse_unary()?;
 
         while let Some(token) = self.peek() {
             match &token.kind {
-                TokenKind::Operator(op @ (Operator::Multply | Operator::Divide)) => {
+                TokenKind::Operator(op @ (Operator::Multiply | Operator::Divide)) => {
                     let op = *op;
                     self.next();
                     let right = Box::new(self.parse_unary()?);
-                    expr = Expr::Binary {
+                    expr = Expression::Binary {
                         left: Box::new(expr),
-                        op,
+                        operator: op,
                         right,
                     };
                 }
@@ -471,14 +472,16 @@ where
     }
 
     /// Parse unary expressions, including '!' for boolean negation.
-    fn parse_unary(&mut self) -> ParseResult<Expr> {
+    fn parse_unary(&mut self) -> ParseResult<Expression> {
         if let Some(_) = self.peek() {
             // If there's a '!' operator, consume it and parse unary recursively
-            if let Some(_op_token) = self.consume_if(|t| matches!(t.kind, TokenKind::Operator(Operator::Not))) {
+            if let Some(_op_token) =
+                self.consume_if(|t| matches!(t.kind, TokenKind::Operator(Operator::Not)))
+            {
                 let expr = self.parse_unary()?;
-                Ok(Expr::Unary {
-                    op: Operator::Not,
-                    expr: Box::new(expr),
+                Ok(Expression::Unary {
+                    operator: Operator::Not,
+                    expression: Box::new(expr),
                 })
             } else {
                 self.parse_atom()
@@ -488,20 +491,26 @@ where
         }
     }
 
-    fn parse_atom(&mut self) -> ParseResult<Expr> {
+    fn parse_atom(&mut self) -> ParseResult<Expression> {
         let token = self.expect_next("parse_atom: expected a token, found none")?;
         let mut expr = match token.kind {
-            TokenKind::BooleanLiteral(bl) => Expr::Boolean(bl),
-            TokenKind::NumberLiteral(nl) => Expr::Number(nl),
-            TokenKind::CharLiteral(c) => Expr::Char(c),
-            TokenKind::Identifier(id) => Expr::Ident(id),
+            TokenKind::Literal(Literal::Integer(integer_literal)) => {
+                Expression::Literal(Literal::Integer(integer_literal))
+            }
+            TokenKind::Literal(Literal::Boolean(boolean_literal)) => {
+                Expression::Literal(Literal::Boolean(boolean_literal))
+            }
+            TokenKind::Literal(Literal::Character(char_literal)) => {
+                Expression::Literal(Literal::Character(char_literal))
+            }
+            TokenKind::Identifier(id) => Expression::Ident(id),
             TokenKind::Punctuation(Punctuation::OpenParen) => {
                 let inner_expr = self.parse_expression()?;
                 let _close = self.expect_token(
                     |t| matches!(t.kind, TokenKind::Punctuation(Punctuation::CloseParen)),
                     "parse_atom: expected ')'",
                 )?;
-                Expr::Grouping(Box::new(inner_expr))
+                Expression::Grouping(Box::new(inner_expr))
             }
             _ => {
                 return Err(self.error(
@@ -538,7 +547,7 @@ where
                     |t| matches!(t.kind, TokenKind::Punctuation(Punctuation::CloseParen)),
                     "parse_atom: expected ')' after function call arguments",
                 )?;
-                expr = Expr::Call {
+                expr = Expression::Call {
                     callee: Box::new(expr),
                     args,
                 };
@@ -552,14 +561,14 @@ where
 
     fn parse_function_declaration(&mut self) -> ParseResult<Function> {
         self.expect_token(
-            |t| matches!(t.kind, TokenKind::Keyword(Keyword::Func)),
-            "parse_func_decl: expected 'func' keyword",
+            |t| matches!(t.kind, TokenKind::Keyword(Keyword::Function)),
+            "parse_function_declaration: expected 'function' keyword",
         )?;
 
         // Function name
         let name_token = self.expect_token(
             |t| matches!(t.kind, TokenKind::Identifier(_)),
-            "parse_func_decl: expected function name",
+            "parse_function_declaration: expected function name",
         )?;
         let name = if let TokenKind::Identifier(n) = name_token.kind {
             n
@@ -570,7 +579,7 @@ where
         // Parameters
         self.expect_token(
             |t| matches!(t.kind, TokenKind::Punctuation(Punctuation::OpenParen)),
-            "parse_func_decl: expected '('",
+            "parse_function_declaration: expected '('",
         )?;
         let mut args = Vec::new();
         while let Some(token) = self.peek() {
@@ -582,7 +591,7 @@ where
                 TokenKind::Identifier(_) => {
                     let param_name_token = self.expect_token(
                         |t| matches!(t.kind, TokenKind::Identifier(_)),
-                        "parse_func_decl: expected parameter name",
+                        "parse_function_declaration: expected parameter name",
                     )?;
                     let argument_name = if let TokenKind::Identifier(n) = param_name_token.kind {
                         n
@@ -592,7 +601,7 @@ where
 
                     let param_type_token = self.expect_token(
                         |t| matches!(t.kind, TokenKind::TypeIdentifier(_)),
-                        "parse_func_decl: expected parameter type",
+                        "parse_function_declaration: expected parameter type",
                     )?;
                     let argument_type = if let TokenKind::TypeIdentifier(t) = param_type_token.kind
                     {
@@ -624,7 +633,9 @@ where
         }
 
         // Optional return type
-        let return_type = if let Some(ret_type_token) = self.consume_if(|t| matches!(t.kind, TokenKind::TypeIdentifier(_))) {
+        let return_type = if let Some(ret_type_token) =
+            self.consume_if(|t| matches!(t.kind, TokenKind::TypeIdentifier(_)))
+        {
             if let TokenKind::TypeIdentifier(t) = ret_type_token.kind {
                 Some(t)
             } else {
@@ -643,7 +654,7 @@ where
                 parameters: args,
                 return_type,
             },
-            body: FunctionBody::UserDefinedBody(body),
+            body: FunctionBody::Statements(body),
         })
     }
 

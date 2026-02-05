@@ -1,7 +1,5 @@
-use crate::interpreter::Value;
-use crate::token::{TypeIdentifier};
 use crate::parser::statement::Statement;
-use std::sync::Arc;
+use crate::token::TypeIdentifier;
 
 #[derive(Debug, Clone)]
 pub struct Function {
@@ -22,20 +20,9 @@ pub struct FunctionParameter {
     pub parameter_type: TypeIdentifier,
 }
 
-#[derive(Clone)]
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub enum FunctionBody {
-    UserDefinedBody(Vec<Statement>),
-    NativeBody(Arc<dyn Fn(&[crate::interpreter::Value]) -> Option<Value> + Send + Sync>),
-}
-impl std::fmt::Debug for FunctionBody {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FunctionBody::UserDefinedBody(stmts) => {
-                f.debug_tuple("UserDefinedBody").field(stmts).finish()
-            }
-            FunctionBody::NativeBody(_) => {
-                f.debug_tuple("NativeBody").field(&"<native fn>").finish()
-            }
-        }
-    }
+    Statements(Vec<Statement>),
+    Empty,
 }

@@ -1,19 +1,19 @@
-use crate::parser::VarDecl;
-use crate::parser::expression::Expr;
+use crate::parser::VariableDeclaration;
+use crate::parser::expression::Expression;
 use crate::parser::function::Function;
 
 #[derive(Debug, Clone)]
 pub enum Statement {
-    VarDecl(VarDecl),
+    VariableDeclaration(VariableDeclaration),
     Assignment {
         identifier: String,
-        expr: Expr,
+        expr: Expression,
     },
-    Expr(Expr),
+    Expression(Expression),
     FunctionDeclaration(Function),
-    Return(Option<Expr>),
+    Return(Option<Expression>),
     If {
-        condition: Expr,
+        condition: Expression,
         then_branch: Vec<Statement>,
         else_branch: Option<Vec<Statement>>,
     },
