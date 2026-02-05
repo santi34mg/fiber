@@ -1,0 +1,48 @@
+# Production branch workflow
+# This workflow runs when there's a direct push to prod (for hotfixes)
+# Normal flow is: dev -> (auto-deploy) master
+
+name: Master CI
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  build_and_test:
+    name: Build and run tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Rust dependencies
+        id: cache-rs
+        uses: actions/cache@v5
+        env:
+          cache-name: cache-rs-dependencies
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test

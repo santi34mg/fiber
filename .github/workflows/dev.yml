@@ -1,0 +1,60 @@
+name: Dev CI
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+jobs:
+  build_and_test:
+    name: Build and run tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Rust dependencies
+        id: cache-rs
+        uses: actions/cache@v5
+        env:
+          cache-name: cache-rs-dependencies
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+
+  merge_master:
+    name: Merge to master
+    needs: build_and_test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge stage to prod
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git fetch origin prod || true
+          git checkout prod || git checkout -b prod origin/prod || git checkout -b prod
+          git merge origin/stage --allow-unrelated-histories -m "Merge stage to prod after successful deployment" || true
+          git push origin prod
