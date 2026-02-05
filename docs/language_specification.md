@@ -234,7 +234,6 @@ An integer literal represents an integer constant.
 <decimal_literal>     ::= [0-9][0-9_]*
 <hexadecimal_literal> ::= 0x[0-9a-fA-F][0-9a-fA-F_]*
 <binary_literal>      ::= 0b[01][01_]*
-<octal_literal>       ::= 0o[0-7][0-7_]*
 ```
 
 Underscores may appear between digits for readability and are ignored.
@@ -1221,7 +1220,80 @@ let third int = arr.2;
 
 ## Type system
 
-fib has static typing with type inference at compile time.
+fib has static typing with type inference at compile time. All types and type conversions are checked at compile time unless explicitly marked as runtime-checked. Type errors are always compile-time errors.
+
+## Memory model, ownership, and lifetime
+
+fib uses a pragmatic memory and value model:
+
+- All variables and heap allocations must be initialized before use. Uninitialized variables or memory are a compile-time error.
+- By default, values (ints, structs, etc.) use copy semantics: assignment and passing by value create independent copies.
+- Move semantics (where assignment or passing invalidates the source) are only enabled for types or variables explicitly marked with a compiler hint (`@drop_if_moved`). Unique pointers (`unique &T`) have this hint by default via the standard library.
+- Shared pointers (`shared &T`) use reference counting for memory management. Multiple shared pointers may reference the same memory; memory is freed when the last reference is dropped.
+- Weak pointers (`weak &T`) do not affect reference counts and must be upgraded to shared pointers before use.
+
+### Lifetime rules
+
+- Stack-allocated variables live until the end of their scope.
+- Heap-allocated values live until their last unique owner is dropped (for unique pointers) or reference count reaches zero (for shared pointers).
+- Borrowed references (if supported) must not outlive their referent.
+
+Violations of lifetime rules (use-after-free, double-free, dangling pointer) are compile-time errors where detectable, and always forbidden.
+
+### Initialization
+
+All variables and heap allocations must be initialized before use. Uninitialized variables or memory are a compile-time error.
+Using the `@uninitalized` hint prevents the compiler from throwing an error and warning instead.
+
+### Evaluation order
+
+Unless otherwise specified, evaluation order is left-to-right for all function arguments and subexpressions. Side effects occur in evaluation order. Any deviation is implementation-defined and must be documented.
+
+### ABI and FFI
+
+The Application Binary Interface (ABI) is implementation-defined.
+
+> TODO: Interfacing with foreign code (FFI) has not been specified yet by this language specification.
+
+## Undefined and implementation-defined behavior
+
+Undefined behavior is any program action for which this specification imposes no requirements. Implementations may behave unpredictably in such cases. Implementation-defined behavior must be documented by the implementation and should be minimized.
+
+## Examples and edge cases
+
+Throughout this document, examples are provided for both typical and edge-case scenarios. If an example is missing for a non-obvious behavior, it should be considered underspecified and reported as a documentation bug.
+
+### Type casting
+
+Type casting allows converting a value from one type to another, either by reinterpreting the underlying bits (raw casting) or by using a safe conversion (safe casting).
+
+#### Raw casting
+
+Raw casting only changes the types; it does not perform any operation on the underlying value.
+Raw casting requires the two types to be of the same size (for example, you cannot cast from `int` to `bool` because the former is 4 bytes and the latter is 1 byte).
+
+> Note: raw casting is not recommended for general use. `@raw_cast` is provided to allow conversions between types in low-level scenarios and should be used with care as any language hint.
+
+**Example**:
+
+```
+@raw_cast
+let x Int_8 =  'c';
+```
+
+This example casts the character literal `'c'` to an `Int_8` (unsigned 8-bit integer).
+
+#### Safe casting
+
+Safe casting is an abstraction over raw casting. Use the standard library to safely cast between types.
+
+**Examples**:
+
+```
+let x int = 3.14f.cast_int();
+// same as:
+let x int = cast_int(3.14f)
+```
 
 ### Types
 
@@ -1714,7 +1786,7 @@ Pointers enable indirect access to data and are essential for dynamic memory man
 fib provides two categories of pointers:
 
 - **Safe pointers** (`unique &T`, `shared &T`, `weak &T`): The default; provide automatic memory management and compile-time safety guarantees.
-- **Raw pointers** (`&T`): Low-level pointers with manual memory management; require the `@unsafe` context.
+- **Raw pointers** (`&T`): Low-level pointers with manual memory management; require `@unsafe` context.
 
 #### Safe pointer types
 
@@ -1741,7 +1813,8 @@ unique &<type>
 **Example**:
 
 ```
-alloc p unique &int, 1;
+let x int = 5;
+let p unique &int = addressof x;
 deref p = 42;
 
 let q unique &int = p;   // Ownership moves from p to q
@@ -1771,7 +1844,8 @@ shared &<type>
 **Example**:
 
 ```
-alloc p shared &int, 1;
+let x int = 5;
+let p shared &int = addressof x;
 deref p = 42;
 
 let q shared &int = p;   // Reference count is now 2
@@ -1797,7 +1871,8 @@ The upgrade operation is provided by the standard library and returns an option 
 **Example**:
 
 ```
-alloc p shared &int, 1;
+let x int = 5;
+let p shared &int = addressof x;
 deref p = 42;
 
 let w weak &int = Weak:from(p);   // Create weak pointer (std library)
@@ -1836,13 +1911,13 @@ Raw pointers require the `@unsafe` hint and place full responsibility for memory
 ##### Pointer arithmetic
 
 Raw pointers support arithmetic operations for navigating contiguous memory.
-Pointer arithmetic is allowed by default within `@unsafe` blocks but may be disabled with the `@no_pointer_arithmetic` hint.
+Pointer arithmetic is allowed by default within `@unsafe` blocks.
 
 **Example**:
 
 ```
 @unsafe {
-    alloc buffer &int, 10;
+    alloc buffer &int, 10 = ZeroArray:new(10);
 
     let first &int = buffer;
     let second &int = buffer + 1;    // Points to second element
@@ -1852,6 +1927,8 @@ Pointer arithmetic is allowed by default within `@unsafe` blocks but may be disa
     deref second = 200;
 }
 ```
+
+Here the `ZeroArray` module from the standard library is being used.
 
 #### Obtaining addresses
 
@@ -1889,13 +1966,15 @@ Dereferencing may be used to read or write the pointed-to value.
 **Example**:
 
 ```
-alloc p unique &int, 1;
+let x int = 5;
+let p unique &int, 1 = addressof x;
 deref p = 42;           // Write through pointer
 let value int = deref p; // Read through pointer
 ```
 
+TODO: verify if this statement is coherent
 For safe pointers, dereferencing is always valid.
-For raw pointers, dereferencing a null or invalid pointer causes a panic.
+For raw pointers, dereferencing may lead to a panic.
 
 #### Null pointers
 
@@ -1904,18 +1983,12 @@ A _null pointer_ is a pointer that does not reference any valid memory location.
 **Creating null pointers**:
 
 ```
-let p &int = null;       // Explicit null (raw pointer, requires @unsafe)
-```
-
-**Uninitialized pointers**:
-
-A pointer declared without an initializer is implicitly null.
-
-```
 @unsafe {
-    let p &int;          // p is null
-    deref p;             // Runtime panic: null pointer dereference
+    let p1 &int = null;
 }
+let p2 unique &int = null;
+let p3 shared &int = null;
+let p4 weak   &int = null;
 ```
 
 **Null checks**:
@@ -1934,7 +2007,18 @@ Null pointers may be compared using equality operators.
 }
 ```
 
-Dereferencing a null pointer causes a panic.
+The compiler will try to determine if a pointer is null at the time of dereference.
+If the compiler can statically determine that a null dereference is going to happen it will throw a compile time error.
+Dereferencing a null pointer at runtime causes a panic.
+
+```
+@unsafe {
+    let p &int = null;
+    deref p;            // compile time error
+}
+```
+
+This behavior applies to unique, shared and weak pointers as well.
 
 ### Contracts
 
@@ -2238,6 +2322,8 @@ For large values, the implementation may optimize by passing references internal
 
 A function is invoked by applying it to arguments.
 
+> **Note:** When calling a method on a value (e.g., `<value>.<method>()`), the compiler rewrites this as a function call (e.g., `<method>(<value>)`) at compile time.
+
 **Syntax**:
 
 ```
@@ -2317,6 +2403,20 @@ let add_five (int) -> int = make_adder(5);
 let result int = add_five(10);  // result = 15
 ```
 
+### Purity and side effects
+
+A `pure` function:
+
+- Does not modify global state
+- Does not perform I/O
+- Does not modify its arguments
+- Returns the same result for the same arguments
+
+A `const` function additionally:
+
+- Does not read global variables
+- Does not read external state (time, random, etc.)
+
 <div class="page"/>
 
 ## Memory management
@@ -2347,26 +2447,26 @@ The `alloc` statement allocates memory on the heap and binds it to a pointer.
 **Syntax**:
 
 ```
-alloc <identifier> <pointer_type>, <count>
+alloc <identifier> <pointer_type>, <count> = <initalization_expression>;
 ```
 
 The statement allocates `<count>` elements of the pointed-to type and binds the resulting pointer to `<identifier>`.
-The allocated memory is zero-initialized.
+The allocated memory is initialized with the value of the `<initalization_expression>`.
 The total bytes allocated is `<count> * size_of(<element_type>)`.
 
 **Examples**:
 
 ```
 // Allocate 10 integers with unique ownership
-alloc numbers unique &int, 10;
+alloc numbers unique &int, 4 = [1, 2, 3, 4];
 deref numbers = 42;              // Set first element
+// [42, 2, 3, 5]
 
 // Allocate with shared ownership
-alloc buffer shared &byte, 1024;
+alloc buffer shared &byte, 1024 = ZeroArray:new(1024);
 
-// Raw pointer allocation (requires @unsafe)
 @unsafe {
-    alloc raw_data &int, 100;
+    alloc raw_data &int, 100 = ZeroArray:new(100);
     // Must be manually freed
 }
 ```
@@ -2390,7 +2490,7 @@ free <pointer_expression>
 
 ```
 @unsafe {
-    alloc p &int, 10;
+    alloc p &int, 10 = [1,1,2,2,3,3,1,1,2,2];
     // ... use p ...
     free p;              // Manual deallocation required
 }
@@ -2414,7 +2514,7 @@ defer <statement>
 
 ```
 @unsafe {
-    alloc buffer &byte, 4096;
+    alloc buffer &byte, 4096 = ZeroArray:new(4096);
     defer free buffer;           // Will execute when scope exits
 
     // ... use buffer ...
@@ -2440,11 +2540,14 @@ See the standard library documentation for arena usage patterns.
 
 ## Compiler Hints
 
-_Compiler hints_ are annotations that provide additional information to the compiler for optimization, verification, and code generation purposes.
+_Compiler hints_ are annotations that provide additional information to the compiler for optimization, verification, code generation, or semantic enforcement.
+
 Hints do not change the semantics of correct programs but may affect performance, diagnostics, and runtime behavior.
 
-Hints are advisory: the compiler may choose to ignore hints when they are not applicable or when better alternatives exist.
-However, some hints (like `@unsafe`) may relax safety checks and should be used with care.
+Some hints may relax safety checks and should be used with care.
+Some hints may enforce stricter rules.
+
+_Hinting_ is the process of adding a hint to an entity.
 
 ### Hint Syntax
 
@@ -2461,7 +2564,7 @@ Multiple hints may be applied to the same element:
 
 ```
 @hint1 @hint2 @hint3
-func example() { ... }
+function example() { ... }
 ```
 
 Hints may also be written on separate lines:
@@ -2469,7 +2572,7 @@ Hints may also be written on separate lines:
 ```
 @hint1
 @hint2
-func example() { ... }
+function example() { ... }
 ```
 
 ### Parameter Hint Semantics
@@ -2511,25 +2614,26 @@ simd_process(unaligned, config);  // Compile-time error: alignment not proven
 Requirement hints enable interprocedural optimizations and compile-time safety checks.
 The function may assume the required properties hold without runtime verification.
 
+> In the example above, `@align(32)` does not align the values. The hint simply provides the compiler the information that the data is aligned.
+
 #### Promise Hints (External Placement)
 
-When a hint is placed **outside** the function signature with a parameter binding (using `@<hint>:<parameter_name>` syntax), it is a _promise hint_.
+When a hint is placed **outside** the function signature with a parameter binding (using `@<hint>(<parameter_name>)` syntax), it is a _promise hint_.
 The function promises to uphold the specified behavior regarding that parameter.
 The caller is not constrained; any compatible value may be passed.
 
 **Syntax**:
 
 ```
-@<hint>:<parameter_name>
-@<hint>:<parameter_name>
+@<hint>(<parameter_name>)
 function <identifier>(<parameter_name> <type>, ...) <return_type> { ... }
 ```
 
 **Example**:
 
 ```
-@readonly:src
-@writeonly:dest
+@readonly(src)
+@writeonly(dest)
 function copy_buffer(src []byte, dest []byte) {
     // The function promises:
     // - It will not modify src
@@ -2553,7 +2657,7 @@ The compiler verifies that the function upholds its promises and issues a compil
 A parameter may have both requirement and promise hints:
 
 ```
-@readonly:config
+@readonly(config)
 function process(@immutable config Config, @nonnull output []byte) {
     // config: caller guarantees immutability, function promises not to modify
     // output: caller must provide non-null (no promise about modification)
@@ -2568,836 +2672,56 @@ In this example:
 
 #### Verification Rules
 
-| Hint Placement       | Who is Constrained      | Compiler Verification                   |
-| -------------------- | ----------------------- | --------------------------------------- |
-| Inline (requirement) | Call sites              | Verifies arguments satisfy requirements |
-| External (promise)   | Function implementation | Verifies function upholds the promise   |
-
-**Requirement hint verification**:
-
-```
-function dereference(@nonnull ptr Pointer) int {
-    return ptr.value;  // Safe: @nonnull requirement guarantees non-null
-}
-
-let maybe_null Pointer = get_pointer();
-dereference(maybe_null);  // Compile-time error: cannot prove non-null
-
-let definitely_valid @nonnull Pointer = get_valid_pointer();
-dereference(definitely_valid);  // Valid: @nonnull proven
-```
-
-**Promise hint verification**:
-
-```
-@readonly:data
-function bad_readonly(data []int) {
-    data.0 = 42;  // Compile-time error: violates @readonly promise
-}
-```
-
-#### Parameter Hint Examples
-
-The same hint used in both modes:
-
-```
-// Requirement: caller must provide non-null data
-function process(@nonnull data []byte) {
-    // Can skip null checks; compiler verified at call site
-    ...
-}
-
-// Promise: function won't modify config
-@readonly:config
-function use_config(config Config) {
-    // Caller can pass any Config
-    // Function promises not to modify it
-    ...
-}
-```
-
-Alignment as a requirement:
-
-```
-function vector_add(@aligned(16) a []float, @aligned(16) b []float, out []float) {
-    // Caller guarantees alignment; enables SIMD without runtime checks
-    @vectorize
-    for let i = 0; i < len(a); i++ {
-        out.i = a.i + b.i;
-    }
-}
-```
-
-### Function Hints
-
-Function hints appear before function declarations and affect how the function is compiled and optimized.
-
-#### Inlining Hints
-
-| Hint             | Description                                                                 |
-| ---------------- | --------------------------------------------------------------------------- |
-| `@inline`        | Suggest inlining the function at call sites to avoid function call overhead |
-| `@no_inline`     | Prevent inlining; useful for debugging or controlling code size             |
-| `@always_inline` | Force inlining even if the compiler determines it may not be beneficial     |
-| `@flatten`       | Inline all function calls within this function's body                       |
-
-These hints may be applied at the function declaration level or at specific call sites within a function body.
-
-**Function-level example**:
-
-```
-@inline
-function add(a int, b int) int {
-    return a + b;
-}
-
-@no_inline
-function debug_print(msg string) {
-    // Keep as separate function for debugging
-    print(msg);
-}
-```
-
-**Call-site example**:
-
-```
-function compute(x int, y int) int {
-    // Inline only this specific call to add
-    let sum int = @inline add(x, y);
-
-    // This call to add uses default inlining heuristics
-    let other int = add(y, x);
-
-    // Force inline an expensive operation in a hot path
-    let result int = @always_inline expensive_calculation(sum);
-
-    // Prevent inlining for this specific call (e.g., for profiling)
-    @no_inline debug_print("result computed");
-
-    return result + other;
-}
-```
-
-Call-site hints override function-level hints for that specific invocation.
-
-#### Execution Frequency Hints
-
-| Hint    | Description                                                                |
-| ------- | -------------------------------------------------------------------------- |
-| `@hot`  | Mark function as frequently executed; prioritize optimization for speed    |
-| `@cold` | Mark function as rarely executed; optimize for size, move out of hot paths |
+Promise hints are verified to be upheld by the constrained function. If the compiler can statically determine that the function does not uphold the promise it will throw a comile time error.
 
 **Example**:
 
 ```
-@hot
-function process_packet(data []byte) Result {
-    // Critical path, optimize aggressively
-    ...
-}
-
-@cold
-function handle_error(err Error) {
-    // Rarely executed error handling
-    log_error(err);
-    cleanup();
+@writeonly(buffer)
+function read_buffer(buffer []byte) {
+    let new_buf []int = buffer;
 }
 ```
 
-#### Purity and Side Effect Hints
-
-| Hint               | Description                                                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `@pure`            | Function has no side effects; result depends only on arguments. Enables memoization and common subexpression elimination |
-| `@const`           | Like `@pure`, but also does not read any global or external state                                                        |
-| `@no_side_effects` | Alias for `@pure`                                                                                                        |
-
-A `@pure` function:
-
-- Does not modify global state
-- Does not perform I/O
-- Does not modify its arguments
-- Returns the same result for the same arguments
-
-A `@const` function additionally:
-
-- Does not read global variables
-- Does not read external state (time, random, etc.)
-
-**Example**:
+Here the compiler will throw an error at compile time because it can determine that buffer is being read while being hinted that it is write-only.
 
 ```
-@pure
-function square(x int) int {
-    return x * x;
-}
-
-@const
-function compute_offset(base int, index int) int {
-    return base + index * 4;
-}
-
-// Compiler can optimize:
-let a = square(5) + square(5);  // May compute square(5) only once
-```
-
-#### Recursion Hints
-
-| Hint              | Description                                                                 |
-| ----------------- | --------------------------------------------------------------------------- |
-| `@recursive`      | Hint that function is recursive; enable recursion-specific optimizations    |
-| `@no_recurse`     | Promise the function does not recurse; enables stack analysis optimizations |
-| `@tail_recursive` | Assert function uses tail recursion; enable tail-call optimization          |
-| `@leaf`           | Function does not call other functions; simplifies stack frame              |
-
-**Example**:
-
-```
-@tail_recursive
-function factorial_tail(n int, acc int) int {
-    if n <= 1 {
-        return acc;
-    }
-    return factorial_tail(n - 1, n * acc);  // Tail call, can be optimized to loop
-}
-
-@leaf
-function clamp(x int, min int, max int) int {
-    if x < min { return min; }
-    if x > max { return max; }
-    return x;
+@writeonlt(buffer)
+function read_buffer(buffer []byte) {
+    let new_buf []int = use_buffer(buffer);     // use_buffer does not read from buffer, OK
 }
 ```
 
-#### Control Flow Hints
+When variables are passed to other functions or other forms of control flow, the compiler will attempt statically validate the promise in all possible flows.
 
-| Hint             | Description                                                       |
-| ---------------- | ----------------------------------------------------------------- |
-| `@no_return`     | Function never returns (e.g., `exit()`, `panic()`, infinite loop) |
-| `@returns_twice` | Function may return more than once (e.g., `setjmp`-like behavior) |
-
-**Example**:
+Requirement hints are only validated at the moment of function calling.
 
 ```
-@no_return
-function fatal_error(msg string) {
-    print("FATAL: " + msg);
-    panic
-}
-```
-
-#### Return Value Hints
-
-| Hint                   | Description                                              |
-| ---------------------- | -------------------------------------------------------- |
-| `@must_use`            | Warn if the function's return value is ignored           |
-| `@deprecated`          | Warn when function is called; optionally provide message |
-| `@deprecated(message)` | Warn with custom message when function is called         |
-
-**Example**:
-
-```
-@must_use
-function allocate(size int) Pointer {
-    // Ignoring return value would leak memory
-    ...
+function foo(@readonly x int) {
+    // ...
 }
 
-@deprecated("Use new_process() instead")
-function spawn_process(cmd string) Process {
-    ...
-}
-```
-
-#### Exception and Error Hints
-
-| Hint        | Description                                                    |
-| ----------- | -------------------------------------------------------------- |
-| `@throws`   | Function may return an error or panic                          |
-| `@no_throw` | Function guarantees it will not panic or return error variants |
-
-**Example**:
-
-```
-@no_throw
-function safe_add(a int, b int) int {
-    return a + b;  // Cannot fail
-}
-
-@throws
-function parse_int(s string) (int + ParseError) {
-    ...
-}
-```
-
-### Memory and Allocation Hints
-
-These hints provide information about memory behavior for optimization.
-
-#### Function-Level Memory Hints
-
-| Hint          | Description                                                  |
-| ------------- | ------------------------------------------------------------ |
-| `@no_alloc`   | Function performs no heap allocation                         |
-| `@stack_only` | All data used by function stays on the stack                 |
-| `@no_gc`      | Function will not trigger garbage collection                 |
-| `@allocator`  | Function returns newly allocated memory (for alias analysis) |
-
-**Example**:
-
-```
-@no_alloc @stack_only
-function sum_array(arr []int) int {
-    let total int = 0;
-    for let i = 0; i < len(arr); i++ {
-        total += arr.i;
-    }
-    return total;
-}
-```
-
-### Variable and Parameter Hints
-
-Variable hints appear before variable declarations.
-Parameter hints may be placed inline (promise) or external (requirement); see [Parameter Hint Semantics](#parameter-hint-semantics) for details.
-
-#### Memory Access Hints
-
-| Hint         | Description                                                                       |
-| ------------ | --------------------------------------------------------------------------------- |
-| `@readonly`  | Data will not be modified through this reference                                  |
-| `@writeonly` | Data will only be written, not read                                               |
-| `@restrict`  | Pointer/reference does not alias with other pointers (major optimization enabler) |
-| `@noalias`   | Alias for `@restrict`                                                             |
-| `@volatile`  | Do not optimize away reads/writes; used for hardware registers                    |
-| `@immutable` | Value never changes after initialization                                          |
-
-**Requirement hint example** (inline placement—caller must guarantee):
-
-```
-function copy_buffer(@writeonly dest []byte, @readonly src []byte, len int) {
-    // Caller guarantees: dest is write-only target, src is read-only source
-    // Function can assume these properties; compiler verifies at call sites
-    for let i = 0; i < len; i++ {
-        dest.i = src.i;
-    }
-}
-
-function process_vectors(@restrict a []float, @restrict b []float) {
-    // Caller guarantees: a and b don't alias
-    for let i = 0; i < len(a); i++ {
-        a.i = a.i + b.i;
-    }
-}
-```
-
-**Promise hint example** (external placement—function promises behavior):
-
-```
-@restrict:a
-@restrict:b
-function safe_vector_add(a []float, b []float, out []float) {
-    // Function promises: won't create aliasing issues with a, b, out
-    // Caller can pass any []float; function upholds the promise
-    ...
-}
-
-@readonly:config
-function initialize(config Config) {
-    // Function promises: config will not be modified
-    // Compiler verifies function doesn't mutate config
-    ...
-}
-```
-
-**Variable hint example**:
-
-```
-@volatile
-let hardware_register int;  // Compiler won't optimize away reads/writes
-
-@immutable
-let app_config Config = load_config();  // Never modified after initialization
-```
-
-#### Nullability Hints
-
-| Hint        | Description                                            |
-| ----------- | ------------------------------------------------------ |
-| `@nonnull`  | Pointer or reference is guaranteed to never be null    |
-| `@nullable` | Pointer or reference may be null (explicit annotation) |
-
-**Requirement hint example** (caller must provide non-null):
-
-```
-function process(@nonnull data []byte) {
-    // Caller guarantees: data is non-null
-    // Function can skip null checks; compile-time error if caller can't prove it
-    ...
-}
-```
-
-**Promise hint example** (function promises behavior):
-
-```
-@nonnull:result
-function find_or_create(key string, result []byte) {
-    // Function promises: result will be non-null after call
-    // Caller can pass any []byte; function ensures non-null on return
-    ...
-}
-```
-
-#### Alignment Hints
-
-| Hint             | Description                                         |
-| ---------------- | --------------------------------------------------- |
-| `@aligned(n)`    | Data is aligned to n bytes; enables SIMD operations |
-| `@packed`        | Minimize padding in struct layout                   |
-| `@cache_aligned` | Align to cache line (typically 64 bytes)            |
-
-**Variable hint example**:
-
-```
-@aligned(32)
-let simd_buffer [256]float;  // Aligned for AVX operations
-
-@cache_aligned
-let shared_counter int;  // Avoid false sharing in concurrent code
-```
-
-**Requirement hint example** (caller must provide aligned data):
-
-```
-function simd_multiply(@aligned(32) a []float, @aligned(32) b []float) []float {
-    // Caller guarantees 32-byte alignment; enables AVX operations
-    @vectorize
-    ...
-}
-function simd_multiply(a []float, b []float) []float {
-    // Caller guarantees 32-byte alignment; enables AVX operations
-    @vectorize
-    ...
-}
-```
-
-#### Storage Hints
-
-| Hint            | Description                                    |
-| --------------- | ---------------------------------------------- |
-| `@register`     | Suggest keeping value in CPU register          |
-| `@thread_local` | Each thread gets its own copy of this variable |
-| `@unused`       | Suppress warnings for unused variable          |
-| `@maybe_unused` | Variable may or may not be used                |
-
-**Example**:
-
-```
-@thread_local
-let thread_id int;
-
-func example() {
-    @unused
-    let debug_value int = compute();  // Intentionally unused in release
-}
-```
-
-### Control Flow Hints
-
-Control flow hints provide branch prediction and reachability information.
-
-#### Branch Prediction Hints
-
-| Hint        | Description                        |
-| ----------- | ---------------------------------- |
-| `@likely`   | Branch condition is probably true  |
-| `@unlikely` | Branch condition is probably false |
-
-**Example**:
-
-```
-function process(data []byte) Result {
-    }
-
-    @likely
-    if is_valid(data) {
-        return 'Ok process_valid(data);
-    }
-
-    return 'Err InvalidDataError{};
-}
-```
-
-#### Reachability Hints
-
-| Hint                       | Description                                                   |
-| -------------------------- | ------------------------------------------------------------- |
-| `@unreachable`             | Code path should never execute; enables dead code elimination |
-| `@assume(condition)`       | Tell compiler to assume condition is true for optimization    |
-| `@expect(value, expected)` | Hint the expected value for branch optimization               |
-
-**Example**:
-
-```
-function get_sign(x int) int {
-    if x > 0 { return 1; }
-    if x < 0 { return -1; }
-    if x == 0 { return 0; }
-    @unreachable  // Logically impossible to reach
-}
-
-function optimized_division(a int, b int) int {
-    @assume(b != 0)  // Caller guarantees b is not zero
-    return a / b;
-}
-```
-
-### Loop Hints
-
-Loop hints appear before loop statements to guide loop optimization.
-
-#### Unrolling Hints
-
-| Hint         | Description                                           |
-| ------------ | ----------------------------------------------------- |
-| `@unroll`    | Unroll the loop completely or use compiler heuristics |
-| `@unroll(n)` | Unroll the loop n times                               |
-| `@no_unroll` | Do not unroll this loop                               |
-
-**Example**:
-
-```
-@unroll(4)
-for let i = 0; i < 16; i++ {
-    buffer.i = 0;
-}
-
-@no_unroll
-for let i = 0; i < n; i++ {
-    // Complex loop body, don't unroll
-    process_item(items.i);
-}
-```
-
-#### Vectorization Hints
-
-| Hint            | Description                                                      |
-| --------------- | ---------------------------------------------------------------- |
-| `@vectorize`    | Enable SIMD vectorization for this loop                          |
-| `@no_vectorize` | Disable vectorization                                            |
-| `@ivdep`        | Ignore vector dependencies (assert no loop-carried dependencies) |
-
-**Example**:
-
-```
-@vectorize
-for let i = 0; i < len(a); i++ {
-    result.i = a.i + b.i;
-}
-
-@ivdep  // Trust me, iterations are independent
-for let i = 0; i < n; i++ {
-    data.indices.i = compute(i);
-}
-```
-
-#### Parallelization Hints
-
-| Hint           | Description                                     |
-| -------------- | ----------------------------------------------- |
-| `@parallelize` | Loop iterations are safe to execute in parallel |
-| `@distribute`  | Split loop into multiple loops for optimization |
-
-**Example**:
-
-```
-@parallelize
-for let i = 0; i < len(items); i++ {
-    results.i = expensive_computation(items.i);
-}
-```
-
-### Concurrency Hints
-
-Concurrency hints provide information about thread safety.
-
-| Hint               | Description                                                             |
-| ------------------ | ----------------------------------------------------------------------- |
-| `@thread_safe`     | Function is safe to call from multiple threads concurrently             |
-| `@not_thread_safe` | Function must not be called concurrently                                |
-| `@reentrant`       | Function is safe to call recursively or be interrupted and called again |
-| `@atomic`          | Operations are atomic                                                   |
-| `@lock_free`       | Implementation does not use locks                                       |
-| `@synchronized`    | Function requires external synchronization                              |
-
-**Example**:
-
-```
-@thread_safe @lock_free
-function atomic_increment(counter @atomic int) int {
-    // Implementation uses atomic operations
-    ...
-}
-
-@not_thread_safe
-function update_global_state() {
-    // Must be called with external synchronization
-    ...
-}
-```
-
-### Code Generation Hints
-
-Code generation hints control low-level compilation behavior.
-These hints appear before functions or at module level.
-
-#### Optimization Level Hints
-
-| Hint               | Description                                               |
-| ------------------ | --------------------------------------------------------- |
-| `@optimize(level)` | Override optimization level: 0 (none), 1, 2, 3, or "size" |
-| `@no_optimize`     | Disable all optimizations for this function               |
-
-**Example**:
-
-```
-@no_optimize
-function debug_function() {
-    // Preserve all operations for debugging
-    ...
-}
-
-@optimize(3)
-function critical_path() {
-    // Maximum optimization
-    ...
-}
-
-@optimize("size")
-function rarely_used() {
-    // Optimize for small code size
-    ...
-}
-```
-
-#### Target-Specific Hints
-
-| Hint               | Description                                                           |
-| ------------------ | --------------------------------------------------------------------- |
-| `@target(feature)` | Enable specific CPU features for this function (e.g., "avx2", "neon") |
-| `@section(name)`   | Place code in specific binary section                                 |
-
-**Example**:
-
-```
-@target("avx2")
-function simd_process(data []float) {
-    // Can use AVX2 instructions
-    ...
-}
-
-@section(".fast_code")
-function time_critical() {
-    // Place in special memory section
-    ...
-}
-```
-
-#### Linkage and ABI Hints
-
-| Hint               | Description                                             |
-| ------------------ | ------------------------------------------------------- |
-| `@export`          | Make symbol visible for external linking                |
-| `@internal`        | Symbol is internal to compilation unit                  |
-| `@weak`            | Weak linkage; can be overridden                         |
-| `@abi(convention)` | Use specific calling convention: "c", "fast", "stdcall" |
-
-**Example**:
-
-```
-@export @abi("c")
-function library_entry_point(argc int, argv []string) int {
-    // C-compatible entry point
-    ...
-}
-
-@internal
-function implementation_detail() {
-    // Not visible outside this module
-    ...
-}
-```
-
-### Safety and Verification Hints
-
-Safety hints control runtime checks and provide verification information.
-
-#### Bounds Checking Hints
-
-| Hint               | Description                                                                          |
-| ------------------ | ------------------------------------------------------------------------------------ |
-| `@bounds_check`    | Enable bounds checking (default behavior)                                            |
-| `@no_bounds_check` | Disable bounds checking; use when performance is critical and bounds are proven safe |
-
-**Example**:
-
-```
-@no_bounds_check
-function fast_copy(dest []byte, src []byte, len int) {
-    // Caller guarantees len <= min(dest.len, src.len)
-    for let i = 0; i < len; i++ {
-        dest.i = src.i;
-    }
-}
-```
-
-#### Overflow Checking Hints
-
-| Hint              | Description                                            |
-| ----------------- | ------------------------------------------------------ |
-| `@overflow_check` | Enable integer overflow checking                       |
-| `@no_overflow`    | Assert that integer overflow will not occur            |
-| `@wrapping`       | Use wrapping arithmetic (overflow wraps around)        |
-| `@saturating`     | Use saturating arithmetic (overflow clamps to min/max) |
-
-**Example**:
-
-```
-@no_overflow
-function safe_multiply(a int, b int) int {
-    // Caller guarantees no overflow
-    return a * b;
-}
-
-@wrapping
-function hash_combine(a int, b int) int {
-    // Intentional wrapping for hash computation
-    return a * 31 + b;
-}
-```
-
-#### Unsafe Code Hints
-
-| Hint       | Description                                 |
-| ---------- | ------------------------------------------- |
-| `@unsafe`  | Mark code as unsafe; disables safety checks |
-| `@trusted` | Mark code as trusted; assumes correctness   |
-
-**Example**:
-
-```
-@unsafe
-function raw_memory_access(ptr int, offset int) byte {
-    // Direct memory access, no safety checks
-    ...
-}
-```
-
-#### Contract Hints (Design by Contract)
-
-| Hint                    | Description                                         |
-| ----------------------- | --------------------------------------------------- |
-| `@pre(condition)`       | Precondition that must hold when function is called |
-| `@post(condition)`      | Postcondition that holds when function returns      |
-| `@invariant(condition)` | Invariant that holds throughout execution           |
-
-**Example**:
-
-```
-@pre(n >= 0)
-@post(result >= 1)
-function factorial(n int) int {
-    if n <= 1 { return 1; }
-    return n * factorial(n - 1);
-}
-
-@invariant(len(buffer) > 0)
-function process_buffer(buffer []byte) {
-    ...
-}
+// not allowed
+let bar int = 10;
+foo(bar);
+
+// allowed
+@readonly
+let bar int = 10;
+foo(bar);
 ```
 
 ### Hint Placement Summary
 
-| Hint Category             | Placement                                     | Semantics                      |
-| ------------------------- | --------------------------------------------- | ------------------------------ |
-| Function hints            | Before `function` keyword                     | Applies to function            |
-| Variable hints            | Before `let` keyword                          | Applies to variable            |
-| Parameter hints (require) | Inline, before parameter name: `@hint param`  | Caller must guarantee property |
-| Parameter hints (promise) | External, before function: `@hint:param_name` | Function promises behavior     |
-| Loop hints                | Before `for` keyword                          | Applies to loop                |
-| Branch hints              | Before `if` keyword                           | Applies to branch              |
-| Expression hints          | Before the expression                         | Applies to expression          |
-| Statement hints           | Before the statement                          | Applies to statement           |
-| Type hints                | Before `type` keyword                         | Applies to type                |
-| Module hints              | Before `module` keyword                       | Applies to module              |
-
-### Combining Hints
-
-Multiple hints may be combined when applicable:
-
-```
-@readonly:data
-@inline @pure @no_alloc @must_use
-function compute_checksum(data []byte) int {
-    // @readonly:data is a promise: function won't modify data
-    @unroll(8) @vectorize
-    for let i = 0; i < len(data); i++ {
-        ...
-    }
-    return result;
-}
-
-@readonly:request
-@hot @thread_safe @no_throw
-function process_request(@nonnull request Request) Response {
-    // @nonnull request is a requirement: caller must provide non-null
-    // @readonly:request is a promise: function won't modify request
-    @likely
-    if is_cached(request) {
-        return get_cached(request);
-    }
-    return compute_response(request);
-}
-```
-
-### Hint Verification
-
-Some hints are verified by the compiler:
-
-- `@pure` functions are checked for side effects
-- `@no_alloc` functions are checked for allocation calls
-- `@no_throw` functions are checked for panic paths
-- `@tail_recursive` functions are checked for proper tail calls
-- Requirement hints (inline) are verified at call sites
-- Promise hints (external) are verified within the function body
-
-Violations produce compile-time errors or warnings.
-
-Other hints are advisory and trusted:
-
-- `@assume` conditions are trusted without verification
-- `@restrict` requirement hints (inline) are trusted by the function
-- `@no_bounds_check` safety is the programmer's responsibility
-
-### Standard Library Hint Annotations
-
-The standard library uses hints extensively:
-
-```
-// Standard library examples
-@inline @pure @const
-function abs(x int) int { ... }
-
-// Requirement hints: caller must provide write-only dest, read-only src, no aliasing
-@no_alloc @hot
-function memcpy(@writeonly @restrict dest []byte, @readonly @restrict src []byte, n int) { ... }
-
-// Promise hints: function promises not to modify dest/src beyond contract
-// Requirement hints: caller must provide non-null, aligned data
-@readonly:src
-function simd_memcpy(@nonnull @aligned(16) dest []byte, @nonnull @aligned(16) src []byte, n int) { ... }
-
-@cold @no_return
-function panic_handler(msg string) { ... }
-```
+| Hint Category             | Placement                                      | Semantics                      |
+| ------------------------- | ---------------------------------------------- | ------------------------------ |
+| Function hints            | Before `function` keyword                      | Applies to function            |
+| Variable hints            | Before `let` keyword                           | Applies to variable            |
+| Parameter hints (require) | Inline, before parameter name: `@hint param`   | Caller must guarantee property |
+| Parameter hints (promise) | External, before function: `@hint(param_name)` | Function promises behavior     |
+| Loop hints                | Before `for` keyword                           | Applies to loop                |
+| Branch hints              | Before `if` keyword                            | Applies to branch              |
+| Expression hints          | Before the expression                          | Applies to expression          |
+| Statement hints           | Before the statement                           | Applies to statement           |
+| Type hints                | Before `type` keyword                          | Applies to type                |
+| Module hints              | Before `module` keyword                        | Applies to module              |

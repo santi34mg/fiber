@@ -1,0 +1,38 @@
+contract Node {
+   function get_next(self) Self;
+}
+
+@codegen(
+    // inside codegen use @match(patter string) to match identifiers only one 
+    // @match per codegen
+    type @match("T") LinkedList_T = (
+        // use @captured to access the value matched
+        'Head unique &@captured *
+        // match is restricted to the identifier right after the @match so 
+        // "Tail" is not affected
+        'Tail unique &@captured
+    )
+)
+// After codegen runs and matches "LinkedList_Dog", capturing "Dog" this code is 
+// created:
+// type LinkedList_Dog = (
+//     'Head unique &Dog *
+//     'Tail unique &Dog
+// )
+type Dog = (
+    'name string *
+    'next unique &Dog
+    ;
+    Node {
+        function get_next(self) Self {
+            return deref self.next;
+        }
+    }
+)
+// Usage
+function main() unit {
+    let dog Dog = { name = "Juan", next = null };
+    
+    // empty structs are createdwith {0}
+    let dog_list LinkedList_Dog = {0};
+}
