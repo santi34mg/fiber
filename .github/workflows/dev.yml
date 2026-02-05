@@ -50,11 +50,15 @@ jobs:
     needs: build_and_test
     runs-on: ubuntu-latest
     steps:
-      - name: Merge stage to prod
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge dev to master
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git fetch origin prod || true
-          git checkout prod || git checkout -b prod origin/prod || git checkout -b prod
-          git merge origin/stage --allow-unrelated-histories -m "Merge stage to prod after successful deployment" || true
-          git push origin prod
+          git fetch origin master || true
+          git checkout master || git checkout -b master origin/master || git checkout -b master
+          git merge origin/dev --allow-unrelated-histories -m "Merge stage to prod after successful deployment" || true
+          git push origin master
