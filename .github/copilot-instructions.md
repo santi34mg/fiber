@@ -92,6 +92,7 @@ Commit guidelines (post-task)
 After completing a task and writing the task log, the agent MUST create one or more git commits that capture the final changes. The commits must be constructed according to the following constraints and rules. These rules are authoritative and intended to produce a clean, minimal commit history representing the completed work.
 
 Absolute constraints (MUST NOT be violated)
+
 - Do not introduce any new changes to any file beyond the provided final state.
 - Do not remove or revert existing changes in the final state.
 - Do not modify code, comments, formatting, naming, or structure beyond what already exists in the final state.
@@ -100,6 +101,7 @@ Absolute constraints (MUST NOT be violated)
 - The union of all commits must exactly reproduce the provided final code state. No commit may contain changes not already present.
 
 Commit construction rules
+
 - Partition the final changes into commits such that:
   1. Each commit has a single, well-defined purpose.
   2. Commits are as small as possible while remaining meaningful.
@@ -108,6 +110,7 @@ Commit construction rules
   5. Splitting changes within a single file across commits is allowed only when those splits represent distinct logical purposes.
 
 Commit message rules
+
 - For each commit:
   1. Use a concise, imperative commit subject line (e.g., "Add X", "Fix Y").
   2. In the commit body, briefly describe the intent or rationale for the grouped changes.
@@ -115,10 +118,11 @@ Commit message rules
   4. Do not fabricate exploratory reasoning, abandoned approaches, or trial-and-error behavior.
 
 Procedure
+
 - Stage and commit changes without making further edits. If the final state contains multiple logical changes, create multiple commits that together reproduce the final state when applied in order.
-- After committing, append a short ARTIFACT entry to the task log listing the created commit SHAs and a one-line description for each.
+- Before committing, append a short ARTIFACT entry to the task log listing the created commit SHAs and a one-line description for each and said entry into the commit.
 
 Example (high-level)
+
 - Commit 1: "Add copilot instructions" — adds the instructions file with logging requirements.
 - Commit 2: "Add internal log template" — adds the `internal_progress_logs/log_template.md` file containing the template and example.
-
