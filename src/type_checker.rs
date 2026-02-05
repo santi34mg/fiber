@@ -2,9 +2,10 @@ use std::{collections::HashMap, fmt};
 
 use crate::{
     parser::{
-        Ast, Expr, Function, FunctionBody, FunctionParameter, FunctionSignature, Statement, VarDecl,
+        Ast, Expression, Function, FunctionBody, FunctionParameter, FunctionSignature, Statement,
+        VariableDeclaration,
     },
-    token::{Operator, TypeIdentifier},
+    token::{Literal, Operator, TypeIdentifier},
 };
 
 pub struct TypeChecker<'a> {
@@ -88,8 +89,8 @@ impl<'a> TypeChecker<'a> {
 
     fn check_statement(&mut self, statement: &Statement) -> TypeCheckerResult<TypeIdentifier> {
         match statement {
-            Statement::VarDecl(var_decl) => self.check_var_decl(var_decl),
-            Statement::Expr(expr) => self.check_expr(expr),
+            Statement::VariableDeclaration(var_decl) => self.check_var_decl(var_decl),
+            Statement::Expression(expr) => self.check_expr(expr),
             Statement::Assignment { identifier, expr } => self.check_assignment(identifier, expr),
             Statement::FunctionDeclaration(func_decl) => self.check_func_decl(func_decl),
             Statement::Return(expr) => self.check_return(expr),
@@ -103,7 +104,7 @@ impl<'a> TypeChecker<'a> {
 
     fn check_if(
         &mut self,
-        condition: &Expr,
+        condition: &Expression,
         then_branch: &Vec<Statement>,
         else_branch: &Option<Vec<Statement>>,
     ) -> TypeCheckerResult<TypeIdentifier> {
@@ -124,10 +125,13 @@ impl<'a> TypeChecker<'a> {
         Ok(TypeIdentifier::Boolean)
     }
 
-    fn check_var_decl(&mut self, var_decl: &VarDecl) -> TypeCheckerResult<TypeIdentifier> {
+    fn check_var_decl(
+        &mut self,
+        var_decl: &VariableDeclaration,
+    ) -> TypeCheckerResult<TypeIdentifier> {
         let ident = &var_decl.identifier;
-        let var_type = var_decl.var_type.clone();
-        let expr_type = self.check_expr(&var_decl.expr)?;
+        let var_type = var_decl.variable_type.clone();
+        let expr_type = self.check_expr(&var_decl.expression)?;
         if var_type != expr_type {
             return Err(TypeCheckerError {
                 message: format!(
@@ -143,7 +147,7 @@ impl<'a> TypeChecker<'a> {
     fn check_assignment(
         &mut self,
         identifier: &String,
-        expr: &Expr,
+        expr: &Expression,
     ) -> TypeCheckerResult<TypeIdentifier> {
         let expr_type = self.check_expr(expr)?;
         match self.variables.get(identifier) {
@@ -171,15 +175,17 @@ impl<'a> TypeChecker<'a> {
             .insert(function_name.clone(), function.signature.clone());
 
         // Create and swap in a new local scope for function body, then restore outer scope
-    let outer_scope = std::mem::take(&mut self.variables);
+        let outer_scope = std::mem::take(&mut self.variables);
         // populate parameters into the current (now empty clone) scope using parameter names
         for parameter in &function.signature.parameters {
-            self.variables
-                .insert(parameter.parameter_name.clone(), parameter.parameter_type.clone());
+            self.variables.insert(
+                parameter.parameter_name.clone(),
+                parameter.parameter_type.clone(),
+            );
         }
 
         let mut found_return = false;
-        if let FunctionBody::UserDefinedBody(statements) = &function.body {
+        if let FunctionBody::Statements(statements) = &function.body {
             for stmt in statements {
                 if let Statement::Return(expr) = stmt {
                     found_return = true;
@@ -215,16 +221,20 @@ impl<'a> TypeChecker<'a> {
         Ok(TypeIdentifier::UserDefinedType)
     }
 
-    fn check_return(&mut self, expr: &Option<Expr>) -> TypeCheckerResult<TypeIdentifier> {
+    fn check_return(&mut self, expr: &Option<Expression>) -> TypeCheckerResult<TypeIdentifier> {
         match expr {
             Some(e) => self.check_expr(e),
             None => Ok(TypeIdentifier::UserDefinedType), // or a special Void type if you have one
         }
     }
 
-    fn check_expr(&self, expr: &Expr) -> TypeCheckerResult<TypeIdentifier> {
+    fn check_expr(&self, expr: &Expression) -> TypeCheckerResult<TypeIdentifier> {
         let expr_type = match expr {
-            Expr::Binary { left, op, right } => {
+            Expression::Binary {
+                left,
+                operator: op,
+                right,
+            } => {
                 let left_type = self.check_expr(left)?;
                 let right_type = self.check_expr(right)?;
                 if left_type != right_type {
@@ -233,7 +243,7 @@ impl<'a> TypeChecker<'a> {
                     });
                 }
                 match op {
-                    Operator::Plus | Operator::Minus | Operator::Multply | Operator::Divide => {
+                    Operator::Plus | Operator::Minus | Operator::Multiply | Operator::Divide => {
                         if left_type != TypeIdentifier::Number {
                             return Err(TypeCheckerError {
                                 message: "Arithmetic operators require number types".to_string(),
@@ -248,7 +258,9 @@ impl<'a> TypeChecker<'a> {
                     | Operator::GreaterEqual
                     | Operator::LesserEqual => {
                         // require both sides to be numbers
-                        if left_type != TypeIdentifier::Number || right_type != TypeIdentifier::Number {
+                        if left_type != TypeIdentifier::Number
+                            || right_type != TypeIdentifier::Number
+                        {
                             return Err(TypeCheckerError {
                                 message: "Comparison operators require number types".to_string(),
                             });
@@ -257,7 +269,8 @@ impl<'a> TypeChecker<'a> {
                     }
                     Operator::And | Operator::Or => {
                         // require both sides to be booleans
-                        if left_type != TypeIdentifier::Boolean || right_type != TypeIdentifier::Boolean
+                        if left_type != TypeIdentifier::Boolean
+                            || right_type != TypeIdentifier::Boolean
                         {
                             return Err(TypeCheckerError {
                                 message: "Logical operators require boolean types".to_string(),
@@ -272,15 +285,25 @@ impl<'a> TypeChecker<'a> {
                     }
                 }
             }
-            Expr::Ident(ident) => self.variables.get(ident).cloned().ok_or(TypeCheckerError {
-                message: format!("Use of undeclared variable '{}'", ident),
-            })?,
-            Expr::Number(_) => TypeIdentifier::Number,
-            Expr::Boolean(_) => TypeIdentifier::Boolean,
-            Expr::Char(_) => TypeIdentifier::Char,
-            Expr::Grouping(expr) => self.check_expr(expr)?,
-            Expr::Call { callee, args } => self.check_call(callee, args)?,
-            Expr::Unary { op, expr } => {
+            Expression::Ident(ident) => {
+                self.variables.get(ident).cloned().ok_or(TypeCheckerError {
+                    message: format!("Use of undeclared variable '{}'", ident),
+                })?
+            }
+            Expression::Literal(lit) => match &lit {
+                Literal::Integer(_) => TypeIdentifier::Number,
+                Literal::Boolean(_) => TypeIdentifier::Boolean,
+                Literal::Character(_) => TypeIdentifier::Char,
+                _ => {
+                    todo!()
+                }
+            },
+            Expression::Grouping(expr) => self.check_expr(expr)?,
+            Expression::Call { callee, args } => self.check_call(callee, args)?,
+            Expression::Unary {
+                operator: op,
+                expression: expr,
+            } => {
                 let expr_type = self.check_expr(expr)?;
                 match op {
                     Operator::Not => {
@@ -304,11 +327,11 @@ impl<'a> TypeChecker<'a> {
 
     fn check_call(
         &self,
-        callee: &Box<Expr>,
-        args: &Vec<Expr>,
+        callee: &Box<Expression>,
+        args: &Vec<Expression>,
     ) -> TypeCheckerResult<TypeIdentifier> {
         // Only support identifier calls (e.g., foo(...))
-        if let Expr::Ident(func_name) = &**callee {
+        if let Expression::Ident(func_name) = &**callee {
             // Lookup function signature
             let function_signature = self.functions.get(func_name).ok_or(TypeCheckerError {
                 message: format!("check_call: Call to undefined function '{}'", func_name),
