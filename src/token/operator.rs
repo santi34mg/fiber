@@ -3,7 +3,7 @@ pub enum Operator {
     // Arithmetic
     Plus,
     Minus,
-    Multply,
+    Multiply,
     Divide,
     // Boolean opeartor
     Equals,

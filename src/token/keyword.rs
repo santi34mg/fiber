@@ -1,11 +1,9 @@
-
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Keyword {
-    Var,
+    Let,
     If,
     Else,
-    While,
+    For,
     Return,
-    Func,
+    Function,
 }

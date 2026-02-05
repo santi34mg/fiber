@@ -1,4 +1,7 @@
-use crate::token::{Keyword, Operator, Punctuation, Token, TokenKind, TypeIdentifier};
+use core::panic;
+use std::char;
+
+use crate::token::{Keyword, Literal, Operator, Punctuation, Token, TokenKind, TypeIdentifier};
 
 pub struct Lexer<'input> {
     input: &'input str,
@@ -113,7 +116,7 @@ impl<'input> Lexer<'input> {
             }
             '*' => {
                 self.bump();
-                Some(TokenKind::Operator(Operator::Multply))
+                Some(TokenKind::Operator(Operator::Multiply))
             }
             '/' => {
                 self.bump();
@@ -131,7 +134,7 @@ impl<'input> Lexer<'input> {
                     self.bump();
                     Some(TokenKind::Operator(Operator::And))
                 } else {
-                    Some(TokenKind::Unkown('&'))
+                    Some(TokenKind::Unknown('&'))
                 }
             }
             '|' => {
@@ -140,7 +143,7 @@ impl<'input> Lexer<'input> {
                     self.bump();
                     Some(TokenKind::Operator(Operator::Or))
                 } else {
-                    Some(TokenKind::Unkown('|'))
+                    Some(TokenKind::Unknown('|'))
                 }
             }
             '(' => {
@@ -176,30 +179,67 @@ impl<'input> Lexer<'input> {
                 let ch = self.bump()?; // get the character
                 if self.bump()? != '\'' {
                     // expect closing quote
-                    return Some(Token::new(
-                        TokenKind::Unkown(ch),
-                        start_line,
-                        start_col,
-                    ));
+                    return Some(Token::new(TokenKind::Unknown(ch), start_line, start_col));
                 }
-                Some(TokenKind::CharLiteral(ch))
+                Some(TokenKind::Literal(Literal::Character(ch)))
             }
-            c if c.is_ascii_digit() => Some(self.lex_number()),
+            c if c.is_ascii_digit() => {
+                let num = self.lex_numeric(c);
+                num
+            }
             c if c.is_alphabetic() => Some(self.lex_identifier_or_keyword()),
             c => {
                 self.bump();
-                Some(TokenKind::Unkown(c))
+                Some(TokenKind::Unknown(c))
             }
         };
         Some(Token::new(kind?, start_line, start_col))
     }
 
-    fn lex_number(&mut self) -> TokenKind {
-        let start = self.position;
-        self.skip_while(|c| c.is_ascii_digit());
+    fn lex_numeric(&mut self, first: char) -> Option<TokenKind> {
+        let mut start = self.position;
+        // first char is 0 might be 0x... or might be 0123
+        let (base, f): (u32, fn(char) -> bool) = if first == '0' {
+            self.bump();
+            let second = self.peek()?;
+            match second {
+                'x' => {
+                    self.bump();
+                    start = self.position;
+                    (16, |c: char| c.is_ascii_hexdigit())
+                }
+                'b' => {
+                    self.bump();
+                    start = self.position;
+                    (2, |c: char| c == '0' || c == '1')
+                }
+                'd' => {
+                    self.bump();
+                    (10, |c: char| c.is_ascii_digit())
+                }
+                c if c.is_ascii_digit() => (10, |c: char| c.is_ascii_digit() || c == '.'),
+                '.' => (10, |c: char| c.is_ascii_digit() || c == '.'),
+                // TODO: better error handling
+                _ => {
+                    panic!()
+                }
+            }
+        } else {
+            (10, |c: char| c.is_ascii_digit() || c == '.')
+        };
+        self.skip_while(|c| f(c));
         let num_str = &self.input[start..self.position];
-        let value = num_str.parse::<i32>().unwrap_or(0);
-        TokenKind::NumberLiteral(value)
+        if num_str.contains('.') {
+            let value = ("0".to_string() + num_str).parse::<f32>().ok()?;
+            return Some(TokenKind::Literal(Literal::Float(value)));
+        } else {
+            let value = u32::from_str_radix(num_str, base).unwrap_or_else(|e| {
+                eprintln!("Error: {}\nfor string \"{}\"", e, num_str);
+                // TODO: better errors
+                panic!();
+            });
+            return Some(TokenKind::Literal(Literal::Integer(value)));
+        }
     }
 
     fn lex_identifier_or_keyword(&mut self) -> TokenKind {
@@ -207,17 +247,17 @@ impl<'input> Lexer<'input> {
         self.skip_while(|c| c.is_alphanumeric() || c == '_');
         let name = &self.input[start..self.position];
         match name {
-            "var" => TokenKind::Keyword(Keyword::Var),
-            "func" => TokenKind::Keyword(Keyword::Func),
+            "let" => TokenKind::Keyword(Keyword::Let),
+            "function" => TokenKind::Keyword(Keyword::Function),
             "if" => TokenKind::Keyword(Keyword::If),
             "else" => TokenKind::Keyword(Keyword::Else),
-            "while" => TokenKind::Keyword(Keyword::While),
+            "for" => TokenKind::Keyword(Keyword::For),
             "return" => TokenKind::Keyword(Keyword::Return),
             "int" => TokenKind::TypeIdentifier(TypeIdentifier::Number),
             "bool" => TokenKind::TypeIdentifier(TypeIdentifier::Boolean),
             "char" => TokenKind::TypeIdentifier(TypeIdentifier::Char),
-            "true" => TokenKind::BooleanLiteral(true),
-            "false" => TokenKind::BooleanLiteral(false),
+            "true" => TokenKind::Literal(Literal::Boolean(true)),
+            "false" => TokenKind::Literal(Literal::Boolean(false)),
             _ => TokenKind::Identifier(name.to_string()),
         }
     }

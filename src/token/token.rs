@@ -1,5 +1,19 @@
+use crate::token::keyword::Keyword;
+use crate::token::literal::Literal;
+use crate::token::operator::Operator;
+use crate::token::punctuation::Punctuation;
+use crate::token::type_identifier::TypeIdentifier;
 
-use crate::token::token_kind::TokenKind;
+#[derive(Debug, Clone, PartialEq)]
+pub enum TokenKind {
+    Identifier(String),
+    TypeIdentifier(TypeIdentifier),
+    Literal(Literal),
+    Keyword(Keyword),
+    Operator(Operator),
+    Punctuation(Punctuation),
+    Unknown(char),
+}
 #[derive(Debug, Clone)]
 pub struct Token {
     pub kind: TokenKind,
