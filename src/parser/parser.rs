@@ -179,7 +179,7 @@ where
                         let (identifier, op) = self.parse_increment_decrement()?;
                         // Represent as assignment: x++ => x = x + 1, x-- => x = x - 1
                         let expr = Expression::Binary {
-                            left: Box::new(Expression::Ident(identifier.clone())),
+                            left: Box::new(Expression::Identifier(identifier.clone())),
                             operator: op,
                             right: Box::new(Expression::Literal(Literal::Integer(1))),
                         };
@@ -197,7 +197,7 @@ where
                     let _body = self.parse_body()?;
                     // Represent while as a function call for now (to be implemented properly later)
                     let while_expr = Expression::Call {
-                        callee: Box::new(Expression::Ident("while".to_string())),
+                        callee: Box::new(Expression::Identifier("while".to_string())),
                         args: vec![condition], // Incomplete representation
                     };
                     Statement::Expression(while_expr)
@@ -471,9 +471,12 @@ where
         Ok(expr)
     }
 
-    /// Parse unary expressions, including '!' for boolean negation.
     fn parse_unary(&mut self) -> ParseResult<Expression> {
-        if let Some(_) = self.peek() {
+        // FIXME:   this function should peek and pattern match to find what operator
+        //          in particular is triggering the unary expression parsing and
+        //          then return the correct unary expression from that.
+        // Currently only supports '!' (BOOLEAN NOT) unary operator.
+        if let Some(_t) = self.peek() {
             // If there's a '!' operator, consume it and parse unary recursively
             if let Some(_op_token) =
                 self.consume_if(|t| matches!(t.kind, TokenKind::Operator(Operator::Not)))
@@ -503,7 +506,7 @@ where
             TokenKind::Literal(Literal::Character(char_literal)) => {
                 Expression::Literal(Literal::Character(char_literal))
             }
-            TokenKind::Identifier(id) => Expression::Ident(id),
+            TokenKind::Identifier(id) => Expression::Identifier(id),
             TokenKind::Punctuation(Punctuation::OpenParen) => {
                 let inner_expr = self.parse_expression()?;
                 let _close = self.expect_token(

@@ -285,7 +285,7 @@ impl<'a> TypeChecker<'a> {
                     }
                 }
             }
-            Expression::Ident(ident) => {
+            Expression::Identifier(ident) => {
                 self.variables.get(ident).cloned().ok_or(TypeCheckerError {
                     message: format!("Use of undeclared variable '{}'", ident),
                 })?
@@ -331,7 +331,7 @@ impl<'a> TypeChecker<'a> {
         args: &Vec<Expression>,
     ) -> TypeCheckerResult<TypeIdentifier> {
         // Only support identifier calls (e.g., foo(...))
-        if let Expression::Ident(func_name) = &**callee {
+        if let Expression::Identifier(func_name) = &**callee {
             // Lookup function signature
             let function_signature = self.functions.get(func_name).ok_or(TypeCheckerError {
                 message: format!("check_call: Call to undefined function '{}'", func_name),

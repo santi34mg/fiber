@@ -13,7 +13,8 @@ pub enum Expression {
         expression: Box<Expression>,
     },
     Literal(Literal),
-    Ident(String),
+    // The identifier expression contains the name of the identifier as a string
+    Identifier(String),
     Grouping(Box<Expression>),
     Call {
         callee: Box<Expression>,

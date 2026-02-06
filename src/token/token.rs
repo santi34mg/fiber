@@ -6,6 +6,7 @@ use crate::token::type_identifier::TypeIdentifier;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
+    // The identifier token contains the name of the identifier as a string
     Identifier(String),
     TypeIdentifier(TypeIdentifier),
     Literal(Literal),
