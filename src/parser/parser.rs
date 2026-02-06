@@ -206,6 +206,10 @@ where
                     let expr = self.parse_expression()?;
                     Statement::Expression(expr)
                 }
+                TokenKind::Operator(Operator::Not) => {
+                    let expr = self.parse_expression()?;
+                    Statement::Expression(expr)
+                }
                 TokenKind::TypeIdentifier(_)
                 | TokenKind::Keyword(Keyword::Else)
                 | TokenKind::Operator(_)
